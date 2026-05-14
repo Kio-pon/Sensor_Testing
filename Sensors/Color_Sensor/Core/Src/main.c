@@ -21,9 +21,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "TCS34725.h"
-#include <stdio.h>
-#include <string.h>
+#include "tcs34725_interrupt_test.c"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -52,8 +51,7 @@ UART_HandleTypeDef huart1;
 PCD_HandleTypeDef hpcd_USB_FS;
 
 /* USER CODE BEGIN PV */
-TCS34725_RawData rawData;
-DetectedColor color;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -108,16 +106,8 @@ int main(void)
   MX_USB_PCD_Init();
   MX_I2C2_Init();
   /* USER CODE BEGIN 2 */
-  if (TCS34725_Init(&hi2c1) != HAL_OK)
-  {
-      char msg[] = "TCS34725 Init Failed!\r\n";
-      HAL_UART_Transmit(&huart1, (uint8_t*)msg, strlen(msg), 100);
-  }
-  else
-  {
-      char msg[] = "TCS34725 Init Success!\r\n";
-      HAL_UART_Transmit(&huart1, (uint8_t*)msg, strlen(msg), 100);
-  }
+  //tcs_app_run();
+  tcs34725_interrupt_test();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -128,22 +118,6 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    if (TCS34725_ReadRaw(&hi2c1, &rawData) == HAL_OK)
-    {
-        color = TCS34725_ClassifyColor(&rawData);
-        
-        char buf[128];
-        const char* colorStr = "UNKNOWN";
-        if (color == COLOR_RED) colorStr = "RED";
-        else if (color == COLOR_BLUE) colorStr = "BLUE";
-        else if (color == COLOR_WHITE) colorStr = "WHITE";
-        else if (color == COLOR_BLACK) colorStr = "BLACK";
-        
-        snprintf(buf, sizeof(buf), "R:%u G:%u B:%u C:%u -> %s\r\n", 
-                 rawData.r, rawData.g, rawData.b, rawData.c, colorStr);
-        HAL_UART_Transmit(&huart1, (uint8_t*)buf, strlen(buf), 100);
-    }
-    HAL_Delay(500);
   }
   /* USER CODE END 3 */
 }
@@ -445,12 +419,11 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin : PA0 */
   GPIO_InitStruct.Pin = GPIO_PIN_0;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
-  HAL_NVIC_SetPriority(EXTI0_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(EXTI0_IRQn);
+
   /* USER CODE END MX_GPIO_Init_2 */
 }
 
