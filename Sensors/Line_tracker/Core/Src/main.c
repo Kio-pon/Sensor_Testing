@@ -132,17 +132,17 @@ int main(void)
     int pos = 0;
     
     // Start with carriage return to overwrite the same line
-    pos += snprintf(buf + pos, sizeof(buf) - pos, "\rLine: [");
+    pos += snprintf(buf + pos, sizeof(buf) - pos, "\rLine:   ");
     
     for (int i = 0; i < NUM_QTR_SENSORS; i++) {
         if (qtr_state & (1 << i)) {
             pos += snprintf(buf + pos, sizeof(buf) - pos, " | "); // Line detected (True)
         } else {
-            pos += snprintf(buf + pos, sizeof(buf) - pos, " . "); // No line (False)
+            pos += snprintf(buf + pos, sizeof(buf) - pos, "   "); // No line (False)
         }
     }
     
-    pos += snprintf(buf + pos, sizeof(buf) - pos, "]  ");
+    pos += snprintf(buf + pos, sizeof(buf) - pos, "    ");
     
     HAL_UART_Transmit(&huart1, (uint8_t*)buf, strlen(buf), 100);
     
