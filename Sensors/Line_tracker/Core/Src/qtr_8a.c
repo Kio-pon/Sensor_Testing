@@ -68,7 +68,7 @@ uint8_t QTR_ReadDigital(void) {
     QTR_Read(raw_values);
     uint8_t sensor_state = 0;
     for (int i = 0; i < NUM_QTR_SENSORS; i++) {
-        if (raw_values[i] >= 3500) {
+        if (raw_values[i] >= 3800) {
             sensor_state |= (1 << i);
         }
     }
