@@ -5,14 +5,21 @@ static ADC_HandleTypeDef *qtr_adc = NULL;
 
 // The channels we want to scan (PA0 = IN1, PA1 = IN2, PA2 = IN3, PA3 = IN4)
 static const uint32_t QTR_CHANNELS[NUM_QTR_SENSORS] = {
-    ADC_CHANNEL_1, 
+    ADC_CHANNEL_9, 
     ADC_CHANNEL_2, 
     ADC_CHANNEL_3, 
-    ADC_CHANNEL_4
+    ADC_CHANNEL_4,
+    ADC_CHANNEL_5,
+    ADC_CHANNEL_6,
+    ADC_CHANNEL_7,
+    ADC_CHANNEL_8
+
 };
 
 void QTR_Init(ADC_HandleTypeDef *hadc) {
     qtr_adc = hadc;
+    HAL_ADCEx_Calibration_Start(hadc, ADC_SINGLE_ENDED);
+    
 }
 
 void QTR_Read(uint16_t *sensor_values) {
@@ -22,10 +29,11 @@ void QTR_Read(uint16_t *sensor_values) {
     
     // Default config that applies to all our channels
     sConfig.Rank = ADC_REGULAR_RANK_1;
-    sConfig.SamplingTime = ADC_SAMPLETIME_19CYCLES_5; // Adjust if needed
+    sConfig.SamplingTime = ADC_SAMPLETIME_181CYCLES_5; // Increased sampling time for better accuracy
     sConfig.SingleDiff = ADC_SINGLE_ENDED;
     sConfig.OffsetNumber = ADC_OFFSET_NONE;
     sConfig.Offset = 0;
+
 
     for (int i = 0; i < NUM_QTR_SENSORS; i++) {
         sConfig.Channel = QTR_CHANNELS[i];

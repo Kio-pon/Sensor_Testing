@@ -4,7 +4,7 @@
 #include "main.h"
 
 // Define the number of sensors you are using
-#define NUM_QTR_SENSORS 4
+#define NUM_QTR_SENSORS 8
 
 // Function prototypes
 void QTR_Init(ADC_HandleTypeDef *hadc);
