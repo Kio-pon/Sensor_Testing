@@ -3,17 +3,16 @@
 // Local pointer to the ADC handle
 static ADC_HandleTypeDef *qtr_adc = NULL;
 
-// The channels we want to scan (PA0 = IN1, PA1 = IN2, PA2 = IN3, PA3 = IN4)
+// The channels mapped as requested: IN9 (PC3) first, then IN1 (PA0) onwards.
 static const uint32_t QTR_CHANNELS[NUM_QTR_SENSORS] = {
-    ADC_CHANNEL_9, 
-    ADC_CHANNEL_2, 
-    ADC_CHANNEL_3, 
-    ADC_CHANNEL_4,
-    ADC_CHANNEL_5,
-    ADC_CHANNEL_6,
-    ADC_CHANNEL_7,
-    ADC_CHANNEL_8
-
+    ADC_CHANNEL_9, // PC3 (Sensor 1)
+    ADC_CHANNEL_1, // PA0 (Sensor 2)
+    ADC_CHANNEL_2, // PA1 (Sensor 3)
+    ADC_CHANNEL_3, // PA2 (Sensor 4)
+    ADC_CHANNEL_4, // PA3 (Sensor 5)
+    ADC_CHANNEL_5, // PA4 (Sensor 6)
+    ADC_CHANNEL_6, // PA5 (Sensor 7)
+    ADC_CHANNEL_7  // PA6 (Sensor 8)
 };
 
 void QTR_Init(ADC_HandleTypeDef *hadc) {
@@ -62,4 +61,16 @@ void QTR_Read(uint16_t *sensor_values) {
         // Stop ADC
         HAL_ADC_Stop(qtr_adc);
     }
+}
+
+uint8_t QTR_ReadDigital(void) {
+    uint16_t raw_values[NUM_QTR_SENSORS];
+    QTR_Read(raw_values);
+    uint8_t sensor_state = 0;
+    for (int i = 0; i < NUM_QTR_SENSORS; i++) {
+        if (raw_values[i] >= 3500) {
+            sensor_state |= (1 << i);
+        }
+    }
+    return sensor_state;
 }

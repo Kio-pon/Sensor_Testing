@@ -55,7 +55,7 @@ UART_HandleTypeDef huart1;
 PCD_HandleTypeDef hpcd_USB_FS;
 
 /* USER CODE BEGIN PV */
-uint16_t qtr_values[8];
+uint8_t qtr_state = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -126,14 +126,27 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    QTR_Read(qtr_values);
+    qtr_state = QTR_ReadDigital();
     
     char buf[128];
-    snprintf(buf, sizeof(buf), "S1:%4u  S2:%4u  S3:%4u  S4:%4u  S5:%4u  S6:%4u  S7:%4u  S8:%4u\r\n", 
-             qtr_values[0], qtr_values[1], qtr_values[2], qtr_values[3], qtr_values[4], qtr_values[5], qtr_values[6], qtr_values[7]);
+    int pos = 0;
+    
+    // Start with carriage return to overwrite the same line
+    pos += snprintf(buf + pos, sizeof(buf) - pos, "\rLine: [");
+    
+    for (int i = 0; i < NUM_QTR_SENSORS; i++) {
+        if (qtr_state & (1 << i)) {
+            pos += snprintf(buf + pos, sizeof(buf) - pos, " | "); // Line detected (True)
+        } else {
+            pos += snprintf(buf + pos, sizeof(buf) - pos, " . "); // No line (False)
+        }
+    }
+    
+    pos += snprintf(buf + pos, sizeof(buf) - pos, "]  ");
+    
     HAL_UART_Transmit(&huart1, (uint8_t*)buf, strlen(buf), 100);
     
-    HAL_Delay(200);
+    HAL_Delay(50);
   }
   /* USER CODE END 3 */
 }
@@ -501,6 +514,17 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
+  /* Configure PA0, PA1, PA2, PA3 as Analog */
+  GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3;
+  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /* Configure PC0, PC1, PC2, PC3 as Analog */
+  GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3;
+  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
   /* USER CODE END MX_GPIO_Init_2 */
 }
 
