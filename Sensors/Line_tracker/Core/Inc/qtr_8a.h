@@ -6,6 +6,7 @@
 
 // Define the number of sensors you are using
 #define NUM_QTR_SENSORS 8
+#define QTR_THRESHOLD 3800
 
 void QTR_Init(ADC_HandleTypeDef *hadc);
 void QTR_Read(uint16_t *sensor_values);
