@@ -25,7 +25,7 @@
 #include "qtr_8a.h"
 #include <stdio.h>
 #include <string.h>
-#include "l298n.h"
+#include "tb6612.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -60,8 +60,8 @@ PCD_HandleTypeDef hpcd_USB_FS;
 /* USER CODE BEGIN PV */
 uint8_t qtr_state = 0;
 
-L298N_Motor_t motor_left;
-L298N_Motor_t motor_right;
+TB6612_Motor_t motor_left;
+TB6612_Motor_t motor_right;
 
 /* Note: Assuming a timer like htim3 will be configured in CubeMX for PWM */
 extern TIM_HandleTypeDef htim3; 
@@ -128,13 +128,16 @@ int main(void)
   
   QTR_Init(&hadc1);
 
-  /* --- Simple Motor Test Setup --- */
-  // Make sure to set these to your actual GPIO output pins in CubeMX!
+  /* --- Simple Motor Test Setup (TB6612FNG) --- */
+  // IMPORTANT: TB6612 needs STBY pin HIGH to work. 
+  // Assuming PD2 is your STBY pin (configure as Output in CubeMX!)
+  TB6612_Set_Standby(GPIOD, GPIO_PIN_2, 1);
+
   motor_left.IN1_Port = GPIOE;
   motor_left.IN1_Pin = GPIO_PIN_8;
   motor_left.IN2_Port = GPIOE;
   motor_left.IN2_Pin = GPIO_PIN_9;
-  motor_left.htim = &htim3;         // Must be configured in CubeMX
+  motor_left.htim = &htim3;         
   motor_left.channel = TIM_CHANNEL_1;
   motor_left.max_pwm = 4799;
 
@@ -142,13 +145,13 @@ int main(void)
   motor_right.IN1_Pin = GPIO_PIN_10;
   motor_right.IN2_Port = GPIOE;
   motor_right.IN2_Pin = GPIO_PIN_11;
-  motor_right.htim = &htim3;        // Must be configured in CubeMX
+  motor_right.htim = &htim3;        
   motor_right.channel = TIM_CHANNEL_2;
   motor_right.max_pwm = 4799;
 
   // Initialize motors
-  L298N_Motor_Init(&motor_left);
-  L298N_Motor_Init(&motor_right);
+  TB6612_Motor_Init(&motor_left);
+  TB6612_Motor_Init(&motor_right);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -157,23 +160,23 @@ int main(void)
   {
     /* --- Motor Test Sequence --- */
     // Move Forward
-    L298N_Motor_SetSpeed(&motor_left, 2400);  // 50% speed
-    L298N_Motor_SetSpeed(&motor_right, 2400); // 50% speed
+    TB6612_Motor_SetSpeed(&motor_left, 2400);  // 50% speed
+    TB6612_Motor_SetSpeed(&motor_right, 2400); // 50% speed
     HAL_Delay(2000);
 
     // Stop
-    L298N_Motor_Stop(&motor_left);
-    L298N_Motor_Stop(&motor_right);
+    TB6612_Motor_Stop(&motor_left);
+    TB6612_Motor_Stop(&motor_right);
     HAL_Delay(1000);
 
     // Move Backward
-    L298N_Motor_SetSpeed(&motor_left, -2400); 
-    L298N_Motor_SetSpeed(&motor_right, -2400);
+    TB6612_Motor_SetSpeed(&motor_left, -2400); 
+    TB6612_Motor_SetSpeed(&motor_right, -2400);
     HAL_Delay(2000);
 
     // Stop
-    L298N_Motor_Stop(&motor_left);
-    L298N_Motor_Stop(&motor_right);
+    TB6612_Motor_Stop(&motor_left);
+    TB6612_Motor_Stop(&motor_right);
     HAL_Delay(1000);
 
     /* USER CODE END WHILE */
