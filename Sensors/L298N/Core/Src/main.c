@@ -25,7 +25,7 @@
 #include "qtr_8a.h"
 #include <stdio.h>
 #include <string.h>
-#include "tb6612.h"
+#include "l298n.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -52,6 +52,7 @@ I2C_HandleTypeDef hi2c2;
 SPI_HandleTypeDef hspi1;
 
 TIM_HandleTypeDef htim2;
+TIM_HandleTypeDef htim3;
 
 UART_HandleTypeDef huart1;
 
@@ -60,8 +61,8 @@ PCD_HandleTypeDef hpcd_USB_FS;
 /* USER CODE BEGIN PV */
 uint8_t qtr_state = 0;
 
-TB6612_Motor_t motor_left;
-TB6612_Motor_t motor_right;
+L298N_Motor_t motor_left;
+L298N_Motor_t motor_right;
 
 /* Note: Assuming a timer like htim3 will be configured in CubeMX for PWM */
 extern TIM_HandleTypeDef htim3; 
@@ -77,6 +78,7 @@ static void MX_USB_PCD_Init(void);
 static void MX_I2C2_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_TIM2_Init(void);
+static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -122,22 +124,20 @@ int main(void)
   MX_I2C2_Init();
   MX_ADC1_Init();
   MX_TIM2_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
   char msg[] = "QTR-8A Test (PA0-PA3)\r\n";
   HAL_UART_Transmit(&huart1, (uint8_t*)msg, strlen(msg), 100);
   
   QTR_Init(&hadc1);
 
-  /* --- Simple Motor Test Setup (TB6612FNG) --- */
-  // IMPORTANT: TB6612 needs STBY pin HIGH to work. 
-  // Assuming PD2 is your STBY pin (configure as Output in CubeMX!)
-  TB6612_Set_Standby(GPIOD, GPIO_PIN_2, 1);
-
+  /* --- Simple Motor Test Setup --- */
+  // Make sure to set these to your actual GPIO output pins in CubeMX!
   motor_left.IN1_Port = GPIOE;
   motor_left.IN1_Pin = GPIO_PIN_8;
   motor_left.IN2_Port = GPIOE;
   motor_left.IN2_Pin = GPIO_PIN_9;
-  motor_left.htim = &htim3;         
+  motor_left.htim = &htim3;         // Must be configured in CubeMX
   motor_left.channel = TIM_CHANNEL_1;
   motor_left.max_pwm = 4799;
 
@@ -145,13 +145,13 @@ int main(void)
   motor_right.IN1_Pin = GPIO_PIN_10;
   motor_right.IN2_Port = GPIOE;
   motor_right.IN2_Pin = GPIO_PIN_11;
-  motor_right.htim = &htim3;        
+  motor_right.htim = &htim3;        // Must be configured in CubeMX
   motor_right.channel = TIM_CHANNEL_2;
   motor_right.max_pwm = 4799;
 
   // Initialize motors
-  TB6612_Motor_Init(&motor_left);
-  TB6612_Motor_Init(&motor_right);
+  L298N_Motor_Init(&motor_left);
+  L298N_Motor_Init(&motor_right);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -160,23 +160,23 @@ int main(void)
   {
     /* --- Motor Test Sequence --- */
     // Move Forward
-    TB6612_Motor_SetSpeed(&motor_left, 2400);  // 50% speed
-    TB6612_Motor_SetSpeed(&motor_right, 2400); // 50% speed
+    L298N_Motor_SetSpeed(&motor_left, 2400);  // 50% speed
+    L298N_Motor_SetSpeed(&motor_right, 2400); // 50% speed
     HAL_Delay(2000);
 
     // Stop
-    TB6612_Motor_Stop(&motor_left);
-    TB6612_Motor_Stop(&motor_right);
+    L298N_Motor_Stop(&motor_left);
+    L298N_Motor_Stop(&motor_right);
     HAL_Delay(1000);
 
     // Move Backward
-    TB6612_Motor_SetSpeed(&motor_left, -2400); 
-    TB6612_Motor_SetSpeed(&motor_right, -2400);
+    L298N_Motor_SetSpeed(&motor_left, -2400); 
+    L298N_Motor_SetSpeed(&motor_right, -2400);
     HAL_Delay(2000);
 
     // Stop
-    TB6612_Motor_Stop(&motor_left);
-    TB6612_Motor_Stop(&motor_right);
+    L298N_Motor_Stop(&motor_left);
+    L298N_Motor_Stop(&motor_right);
     HAL_Delay(1000);
 
     /* USER CODE END WHILE */
@@ -525,6 +525,69 @@ static void MX_TIM2_Init(void)
 
   /* USER CODE END TIM2_Init 2 */
   HAL_TIM_MspPostInit(&htim2);
+
+}
+
+/**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 0;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 4799;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
+  HAL_TIM_MspPostInit(&htim3);
 
 }
 
