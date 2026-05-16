@@ -113,10 +113,10 @@ int main(void)
   MX_I2C2_Init();
   MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
-  char msg[] = "Sharp GP2Y0A02YK Test (PA0)\r\n";
+  char msg[] = "Sharp GP2Y0A02YK Test (PA1)\r\n";
   HAL_UART_Transmit(&huart1, (uint8_t*)msg, strlen(msg), 100);
   
-  SharpSensor_Init(&sharp, &hadc1, ADC_CHANNEL_1);
+  SharpSensor_Init(&sharp, &hadc1, ADC_CHANNEL_2);
   /* USER CODE END 2 */
 
   /* Infinite loop */
