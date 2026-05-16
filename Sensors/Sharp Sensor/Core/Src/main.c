@@ -22,7 +22,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "qtr_8a.h"
+#include "sharp_sensor.h"
 #include <stdio.h>
 #include <string.h>
 /* USER CODE END Includes */
@@ -56,6 +56,7 @@ PCD_HandleTypeDef hpcd_USB_FS;
 
 /* USER CODE BEGIN PV */
 uint8_t qtr_state = 0;
+SharpSensor_t sharp;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -112,10 +113,10 @@ int main(void)
   MX_I2C2_Init();
   MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
-  char msg[] = "QTR-8A Test (PA0-PA3)\r\n";
+  char msg[] = "Sharp GP2Y0A02YK Test (PA0)\r\n";
   HAL_UART_Transmit(&huart1, (uint8_t*)msg, strlen(msg), 100);
   
-  QTR_Init(&hadc1);
+  SharpSensor_Init(&sharp, &hadc1, ADC_CHANNEL_1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -126,24 +127,12 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    qtr_state = QTR_ReadDigital();
+    float dist = SharpSensor_ReadDistance(&sharp);
+    float volt = SharpSensor_ReadVoltage(&sharp);
     
     char buf[128];
-    int pos = 0;
-    
-    // Start with carriage return to overwrite the same line
-    pos += snprintf(buf + pos, sizeof(buf) - pos, "\rLine:   ");
-    
-    for (int i = 0; i < NUM_QTR_SENSORS; i++) {
-        if (qtr_state & (1 << i)) {
-            pos += snprintf(buf + pos, sizeof(buf) - pos, " | "); // Line detected (True)
-        } else {
-            pos += snprintf(buf + pos, sizeof(buf) - pos, "   "); // No line (False)
-        }
-    }
-    
-    pos += snprintf(buf + pos, sizeof(buf) - pos, "    ");
-    
+    // Using \r to overwrite the same line for a clean live display
+    snprintf(buf, sizeof(buf), "\rDistance: %6.2f cm | Voltage: %5.3f V   ", dist, volt);
     HAL_UART_Transmit(&huart1, (uint8_t*)buf, strlen(buf), 100);
     
     HAL_Delay(50);
