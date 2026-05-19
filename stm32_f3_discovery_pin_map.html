@@ -1,0 +1,905 @@
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>STM32F3 Discovery — Pin Mapping &amp; Peripherals</title>
+
+  <!-- Premium Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap"
+    rel="stylesheet">
+
+  <style>
+    /* Color Palette & Custom Properties */
+    :root {
+      --bg-dark: #121212;
+      --bg-card: #181818;
+      --bg-input: #222222;
+      --border-dark: #2d2d2d;
+      --text-primary: #e5e7eb;
+      --text-secondary: #9ca3af;
+      --text-tertiary: #6b7280;
+      --accent-color: #3b82f6;
+      --success-color: #10b981;
+      --danger-color: #ef4444;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    /* Global Resets & Layout */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      padding: 32px 24px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: var(--bg-card);
+      border-radius: 12px;
+      border: 1px solid var(--border-dark);
+      padding: 32px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+
+    /* Title & Description */
+    header {
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      font-size: 24px;
+      font-weight: 600;
+      letter-spacing: -0.025em;
+      margin-bottom: 8px;
+      color: #ffffff;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    /* Search & Filter Bar */
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .search-row {
+      display: flex;
+      gap: 12px;
+      width: 100%;
+    }
+
+    .search-wrapper {
+      position: relative;
+      flex: 1;
+    }
+
+    .search-input {
+      width: 100%;
+      background-color: var(--bg-input);
+      border: 1px solid var(--border-dark);
+      color: #ffffff;
+      padding: 12px 16px 12px 42px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: var(--font-sans);
+      transition: all 0.2s ease;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: #555555;
+      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.05);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-tertiary);
+      pointer-events: none;
+    }
+
+    .conn-select {
+      background-color: var(--bg-input);
+      border: 1px solid var(--border-dark);
+      color: #ffffff;
+      padding: 12px 40px 12px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      font-family: var(--font-sans);
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      background-size: 16px;
+      min-width: 180px;
+    }
+
+    .conn-select:focus {
+      outline: none;
+      border-color: #555555;
+    }
+
+    /* Filter Buttons Pills */
+    .filter-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .filt-btn {
+      padding: 8px 18px;
+      font-size: 13px;
+      font-weight: 500;
+      border-radius: 8px;
+      cursor: pointer;
+      border: 1px solid var(--border-dark);
+      background: transparent;
+      color: var(--text-secondary);
+      font-family: var(--font-sans);
+      transition: all 0.2s ease;
+    }
+
+    .filt-btn:hover {
+      border-color: #555555;
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .filt-btn.active {
+      border-color: #ffffff;
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    /* Count Line */
+    .count-line {
+      font-size: 13px;
+      color: var(--text-secondary);
+      font-weight: 500;
+      margin: 8px 0 16px;
+      letter-spacing: 0.02em;
+    }
+
+    /* Table Styling */
+    .wrap {
+      overflow-x: auto;
+      border-radius: 8px;
+      border: 1px solid var(--border-dark);
+    }
+
+    .tbl {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      text-align: left;
+    }
+
+    .tbl th {
+      background: #111111;
+      padding: 14px 16px;
+      font-size: 11px;
+      text-transform: uppercase;
+      font-weight: 600;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border-dark);
+      letter-spacing: 0.05em;
+    }
+
+    .tbl td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-dark);
+      vertical-align: middle;
+      background: #151515;
+    }
+
+    .tbl tr:last-child td {
+      border-bottom: none;
+    }
+
+    .tbl tr:hover td {
+      background: #1e1e1e;
+    }
+
+    /* Badges & Tags */
+    .pin-name {
+      font-family: var(--font-mono);
+      font-weight: 600;
+      font-size: 14px;
+      color: #ffffff;
+    }
+
+    .conn-badge {
+      font-size: 11px;
+      font-weight: 500;
+      padding: 4px 8px;
+      border-radius: 6px;
+      background: #242424;
+      border: 1px solid #333333;
+      color: #cccccc;
+      white-space: nowrap;
+    }
+
+    .func-tag {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 6px;
+      margin: 2px 4px 2px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+
+    .note-tag {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 500;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: #2a2a2a;
+      color: #aaaaaa;
+      margin-left: 8px;
+      border: 1px solid #3d3d3d;
+      font-family: var(--font-mono);
+    }
+
+    .det {
+      font-size: 13px;
+      color: var(--text-secondary);
+      font-family: var(--font-sans);
+      line-height: 1.6;
+    }
+
+    /* 5V Safe Styling */
+    .v5y {
+      color: var(--success-color);
+      font-weight: 600;
+      font-size: 14px;
+      text-align: center;
+      display: block;
+    }
+
+    .v33 {
+      color: var(--danger-color);
+      font-size: 12px;
+      font-weight: 500;
+      text-align: center;
+      display: block;
+    }
+
+    /* Scroll To Top Button */
+    .scroll-btn {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: #222222;
+      border: 1px solid var(--border-dark);
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      z-index: 100;
+    }
+
+    .scroll-btn.visible {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .scroll-btn:hover {
+      background: #333333;
+      transform: translateY(-2px);
+    }
+
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--bg-dark);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #333333;
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #444444;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="container">
+    <header>
+      <h1>STM32F3 Discovery Pinout Mapping</h1>
+      <div class="subtitle">Interactive database containing all GPIO functions, ADC channels, PWM timers, and
+        5V-tolerance statuses.</div>
+    </header>
+
+    <!-- Static Controls: Will never be destroyed on re-render, preventing cursor focus loss -->
+    <div class="controls">
+      <div class="search-row">
+        <div class="search-wrapper">
+          <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
+            stroke="currentColor" style="width:20px;height:20px;">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"></path>
+          </svg>
+          <input type="text" id="searchInput" class="search-input" placeholder="Search pin, peripheral..."
+            oninput="setSearch(this.value)" autofocus="">
+        </div>
+        <select id="connSelect" class="conn-select" onchange="setConn(this.value)">
+          <option value="All">All connectors</option>
+          <option value="Left">Left</option>
+          <option value="Left2">Left2</option>
+          <option value="Right">Right</option>
+          <option value="Right2">Right2</option>
+          <option value="Off-board">Off-board</option>
+        </select>
+      </div>
+      <div class="filter-pills" id="filterPills"><button id="btn-All" class="filt-btn" onclick="setFunc('All')"
+          style="">All</button><button id="btn-ADC" class="filt-btn active" onclick="setFunc('ADC')"
+          style="background: rgba(37, 99, 235, 0.15); color: rgb(96, 165, 250); border-color: rgb(96, 165, 250); box-shadow: rgba(37, 99, 235, 0.15) 0px 0px 8px;">ADC</button><button
+          id="btn-DAC" class="filt-btn" onclick="setFunc('DAC')" style="">DAC</button><button id="btn-PWM"
+          class="filt-btn" onclick="setFunc('PWM')" style="">PWM</button><button id="btn-SPI" class="filt-btn"
+          onclick="setFunc('SPI')" style="">SPI</button><button id="btn-USART" class="filt-btn"
+          onclick="setFunc('USART')" style="">USART</button><button id="btn-I2C" class="filt-btn"
+          onclick="setFunc('I2C')" style="">I2C</button><button id="btn-CAN" class="filt-btn" onclick="setFunc('CAN')"
+          style="">CAN</button></div>
+    </div>
+
+    <div class="count-line" id="countLine">26 pins shown</div>
+
+    <div class="wrap">
+      <table class="tbl">
+        <colgroup>
+          <col style="width:70px">
+          <col style="width:110px">
+          <col style="width:90px">
+          <col style="width:260px">
+          <col>
+        </colgroup>
+        <thead>
+          <tr>
+            <th>Pin</th>
+            <th>Connector</th>
+            <th style="text-align: center;">5V Safe</th>
+            <th>Capabilities</th>
+            <th>Peripherals &amp; Detail</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody">
+          <tr>
+            <td><span class="pin-name">A0</span></td>
+            <td><span class="conn-badge">Left2</span></td>
+            <td><span class="v33">3.3v</span></td>
+            <td><span class="func-tag"
+                style="background:rgba(37, 99, 235, 0.15);color:#60a5fa;border: 1px solid rgba(37, 99, 235, 0.4)">ADC</span>
+            </td>
+            <td class="det">ADC1_IN1<span class="note-tag">BTN1</span></td>
+          </tr>
+          <tr>
+            <td><span class="pin-name">A1</span></td>
+            <td><span class="conn-badge">Left</span></td>
+            <td><span class="v33">3.3v</span></td>
+            <td><span class="func-tag"
+                style="background:rgba(37, 99, 235, 0.15);color:#60a5fa;border: 1px solid rgba(37, 99, 235, 0.4)">ADC</span><span
+                class="func-tag"
+                style="background:rgba(6, 182, 212, 0.15);color:#22d3ee;border: 1px solid rgba(6, 182, 212, 0.4)">PWM</span>
+            </td>
+            <td class="det">ADC1_IN2 · TIM15_CH1N · TIM2_CH2</td>
+          </tr>
+          <tr>
+            <td><span class="pin-name">A2</span></td>
+            <td><span class="conn-badge">Left2</span></td>
+            <td><span class="v33">3.3v</span></td>
+            <td><span class="func-tag"
+                style="background:rgba(37, 99, 235, 0.15);color:#60a5fa;border: 1px solid rgba(37, 99, 235, 0.4)">ADC</span><span
+                class="func-tag"
+                style="background:rgba(6, 182, 212, 0.15);color:#22d3ee;border: 1px solid rgba(6, 182, 212, 0.4)">PWM</span><span
+                class="func-tag"
+                style="background:rgba(139, 92, 246, 0.15);color:#a78bfa;border: 1px solid rgba(139, 92, 246, 0.4)">USART</span>
+            </td>
+            <td class="det">ADC1_IN3 · TIM15_CH1 · TIM2_CH3 · USART2_TX</td>
+          </tr>
+          <tr>
+            <td><span class="pin-name">A3</span></td>
+            <td><span class="conn-badge">Left</span></td>
+            <td><span class="v33">3.3v</span></td>
+            <td><span class="func-tag"
+                style="background:rgba(37, 99, 235, 0.15);color:#60a5fa;border: 1px solid rgba(37, 99, 235, 0.4)">ADC</span><span
+                class="func-tag"
+                style="background:rgba(6, 182, 212, 0.15);color:#22d3ee;border: 1px solid rgba(6, 182, 212, 0.4)">PWM</span><span
+                class="func-tag"
+                style="background:rgba(139, 92, 246, 0.15);color:#a78bfa;border: 1px solid rgba(139, 92, 246, 0.4)">USART</span>
+            </td>
+            <td class="det">ADC1_IN4 · TIM15_CH2 · TIM2_CH4 · USART2_RX</td>
+          </tr>
+          <tr>
+            <td><span class="pin-name">A4</span></td>
+            <td><span class="conn-badge">Left2</span></td>
+            <td><span class="v33">3.3v</span></td>
+            <td><span class="func-tag"
+                style="background:rgba(37, 99, 235, 0.15);color:#60a5fa;border: 1px solid rgba(37, 99, 235, 0.4)">ADC</span><span
+                class="func-tag"
+                style="background:rgba(16, 185, 129, 0.15);color:#34d399;border: 1px solid rgba(16, 185, 129, 0.4)">DAC</span><span
+                class="func-tag"
+                style="background:rgba(6, 182, 212, 0.15);color:#22d3ee;border: 1px solid rgba(6, 182, 212, 0.4)">PWM</span><span
+                class="func-tag"
+                style="background:rgba(139, 92, 246, 0.15);color:#a78bfa;border: 1px solid rgba(139, 92, 246, 0.4)">USART</span>
+            </td>
+            <td class="det">ADC2_IN1 · DAC1_OUT1 · TIM3_CH2 · USART2_CK<span class="note-tag">AUDIO lrck</span></td>
+          </tr>
+          <tr>
+            <td><span class="pin-name">A5</span></td>
+            <td><span class="conn-badge">Left</span></td>
+            <td><span class="v33">3.3v</span></td>
+            <td><span class="func-tag"
+                style="background:rgba(37, 99, 235, 0.15);color:#60a5fa;border: 1px solid rgba(37, 99, 235, 0.4)">ADC</span><span
+                class="func-tag"
+                style="background:rgba(16, 185, 129, 0.15);color:#34d399;border: 1px solid rgba(16, 185, 129, 0.4)">DAC</span><span
+                class="func-tag"
+                style="background:rgba(245, 158, 11, 0.15);color:#fbbf24;border: 1px solid rgba(245, 158, 11, 0.4)">SPI</span>
+            </td>
+            <td class="det">ADC2_IN2 · DAC1_OUT2 · SPI1_SCK<span class="note-tag">GYRO sck</span></td>
+          </tr>
+          <tr>
+            <td><span class="pin-name">A6</span></td>
+            <td><span class="conn-badge">Left2</span></td>
+            <td><span class="v33">3.3v</span></td>
+            <td><span class="func-tag"
+                style="background:rgba(37, 99, 235, 0.15);color:#60a5fa;border: 1px solid rgba(37, 99, 235, 0.4)">ADC</span><span
+                class="func-tag"
+                style="background:rgba(6, 182, 212, 0.15);color:#22d3ee;border: 1px solid rgba(6, 182, 212, 0.4)">PWM</span><span
+                class="func-tag"
+                style="background:rgba(245, 158, 11, 0.15);color:#fbbf24;border: 1px solid rgba(245, 158, 11, 0.4)">SPI</span>
+            </td>
+            <td class="det">ADC2_IN3 · TIM16_CH1 · TIM3_CH1 · SPI1_MISO<span class="note-tag">GYRO miso</span></td>
+          </tr>
+          <tr>
+            <td><span class="pin-name">A7</span></td>
+            <td><span class="conn-badge">Left</span></td>
+            <td><span class="v33">3.3v</span></td>
+            <td><span class="func-tag"
+                style="background:rgba(37, 99, 235, 0.15);color:#60a5fa;border: 1px solid rgba(37, 99, 235, 0.4)">ADC</span><span
+                class="func-tag"
+                style="background:rgba(6, 182, 212, 0.15);color:#22d3ee;border: 1px solid rgba(6, 182, 212, 0.4)">PWM</span><span
+                class="func-tag"
+                style="background:rgba(245, 158, 11, 0.15);color:#fbbf24;border: 1px solid rgba(245, 158, 11, 0.4)">SPI</span>
+            </td>
+            <td class="det">ADC2_IN4 · TIM17_CH1 · TIM1_CH1N · TIM3_CH2 · TIM8_CH1N · SPI1_MOSI<span
+                class="note-tag">GYRO mosi</span></td>
+          </tr>
+          <tr>
+            <td><span class="pin-name">B0</span></td>
+            <td><span class="conn-badge">Left2</span></td>
+            <td><span class="v33">3.3v</span></td>
+            <td><span class="func-tag"
+                style="background:rgba(37, 99, 235, 0.15);color:#60a5fa;border: 1px solid rgba(37, 99, 235, 0.4)">ADC</span><span
+                class="func-tag"
+                style="background:rgba(6, 182, 212, 0.15);color:#22d3ee;border: 1px solid rgba(6, 182, 212, 0.4)">PWM</span>
+            </td>
+            <td class="det">ADC3_IN12 · TIM1_CH2N · TIM3_CH3 · TIM8_CH2N</td>
+          </tr>
+          <tr>
+            <td><span class="pin-name">B1</span></td>
+            <td><span class="conn-badge">Left</span></td>
+            <td><span class="v33">3.3v</span></td>
+            <td><span class="func-tag"
+                style="background:rgba(37, 99, 235, 0.15);color:#60a5fa;border: 1px solid rgba(37, 99, 235, 0.4)">ADC</span><span
+                class="func-tag"
+                style="background:rgba(6, 182, 212, 0.15);color:#22d3ee;border: 1px solid rgba(6, 182, 212, 0.4)">PWM</span>
+            </td>
+            <td class="det">ADC3_IN1 · TIM1_CH3N · TIM3_CH4 · TIM8_CH3N</td>
+          </tr>
+          <tr>
+            <td><span class="pin-name">B2</span></td>
+            <td><span class="conn-badge">Left2</span></td>
+            <td><span class="v33">3.3v</span></td>
+            <td><span class="func-tag"
+                style="background:rgba(37, 99, 235, 0.15);color:#60a5fa;border: 1px solid rgba(37, 99, 235, 0.4)">ADC</span>
+            </td>
+            <td class="det">ADC2_IN12</td>
+          </tr>
+          <tr>
+            <td><span class="pin-name">B13</span></td>
+            <td><span class="conn-badge">Left</span></td>
+            <td><span class="v33">3.3v</span></td>
+            <td><span class="func-tag"
+                style="background:rgba(37, 99, 235, 0.15);color:#60a5fa;border: 1px solid rgba(37, 99, 235, 0.4)">ADC</span><span
+                class="func-tag"
+                style="background:rgba(6, 182, 212, 0.15);color:#22d3ee;border: 1px solid rgba(6, 182, 212, 0.4)">PWM</span><span
+                class="func-tag"
+                style="background:rgba(245, 158, 11, 0.15);color:#fbbf24;border: 1px solid rgba(245, 158, 11, 0.4)">SPI</span>
+            </td>
+            <td class="det">ADC3_IN5 · TIM1_CH1N · SPI2_SCK</td>
+          </tr>
+          <tr>
+            <td><span class="pin-name">C0</span></td>
+            <td><span class="conn-badge">Left2</span></td>
+            <td><span class="v33">3.3v</span></td>
+            <td><span class="func-tag"
+                style="background:rgba(37, 99, 235, 0.15);color:#60a5fa;border: 1px solid rgba(37, 99, 235, 0.4)">ADC</span>
+            </td>
+            <td class="det">ADC12_IN6<span class="note-tag">USB otg_pwr</span></td>
+          </tr>
+          <tr>
+            <td><span class="pin-name">C1</span></td>
+            <td><span class="conn-badge">Left</span></td>
+            <td><span class="v33">3.3v</span></td>
+            <td><span class="func-tag"
+                style="background:rgba(37, 99, 235, 0.15);color:#60a5fa;border: 1px solid rgba(37, 99, 235, 0.4)">ADC</span>
+            </td>
+            <td class="det">ADC12_IN7</td>
+          </tr>
+          <tr>
+            <td><span class="pin-name">C2</span></td>
+            <td><span class="conn-badge">Left2</span></td>
+            <td><span class="v33">3.3v</span></td>
+            <td><span class="func-tag"
+                style="background:rgba(37, 99, 235, 0.15);color:#60a5fa;border: 1px solid rgba(37, 99, 235, 0.4)">ADC</span>
+            </td>
+            <td class="det">ADC12_IN8</td>
+          </tr>
+          <tr>
+            <td><span class="pin-name">C3</span></td>
+            <td><span class="conn-badge">Left</span></td>
+            <td><span class="v33">3.3v</span></td>
+            <td><span class="func-tag"
+                style="background:rgba(37, 99, 235, 0.15);color:#60a5fa;border: 1px solid rgba(37, 99, 235, 0.4)">ADC</span>
+            </td>
+            <td class="det">ADC12_IN9<span class="note-tag">MIC clk</span></td>
+          </tr>
+          <tr>
+            <td><span class="pin-name">C4</span></td>
+            <td><span class="conn-badge">Left2</span></td>
+            <td><span class="v33">3.3v</span></td>
+            <td><span class="func-tag"
+                style="background:rgba(37, 99, 235, 0.15);color:#60a5fa;border: 1px solid rgba(37, 99, 235, 0.4)">ADC</span><span
+                class="func-tag"
+                style="background:rgba(139, 92, 246, 0.15);color:#a78bfa;border: 1px solid rgba(139, 92, 246, 0.4)">USART</span>
+            </td>
+            <td class="det">ADC2_IN5 · USART1_TX</td>
+          </tr>
+          <tr>
+            <td><span class="pin-name">C5</span></td>
+            <td><span class="conn-badge">Left</span></td>
+            <td><span class="v33">3.3v</span></td>
+            <td><span class="func-tag"
+                style="background:rgba(37, 99, 235, 0.15);color:#60a5fa;border: 1px solid rgba(37, 99, 235, 0.4)">ADC</span><span
+                class="func-tag"
+                style="background:rgba(139, 92, 246, 0.15);color:#a78bfa;border: 1px solid rgba(139, 92, 246, 0.4)">USART</span>
+            </td>
+            <td class="det">ADC2_IN11 · USART1_RX</td>
+          </tr>
+          <tr>
+            <td><span class="pin-name">E7</span></td>
+            <td><span class="conn-badge">Left</span></td>
+            <td><span class="v33">3.3v</span></td>
+            <td><span class="func-tag"
+                style="background:rgba(37, 99, 235, 0.15);color:#60a5fa;border: 1px solid rgba(37, 99, 235, 0.4)">ADC</span>
+            </td>
+            <td class="det">ADC3_IN13</td>
+          </tr>
+          <tr>
+            <td><span class="pin-name">E9</span></td>
+            <td><span class="conn-badge">Left</span></td>
+            <td><span class="v33">3.3v</span></td>
+            <td><span class="func-tag"
+                style="background:rgba(37, 99, 235, 0.15);color:#60a5fa;border: 1px solid rgba(37, 99, 235, 0.4)">ADC</span><span
+                class="func-tag"
+                style="background:rgba(6, 182, 212, 0.15);color:#22d3ee;border: 1px solid rgba(6, 182, 212, 0.4)">PWM</span>
+            </td>
+            <td class="det">ADC3_IN2 · TIM1_CH1<span class="note-tag">LED1</span></td>
+          </tr>
+          <tr>
+            <td><span class="pin-name">E10</span></td>
+            <td><span class="conn-badge">Left2</span></td>
+            <td><span class="v33">3.3v</span></td>
+            <td><span class="func-tag"
+                style="background:rgba(37, 99, 235, 0.15);color:#60a5fa;border: 1px solid rgba(37, 99, 235, 0.4)">ADC</span><span
+                class="func-tag"
+                style="background:rgba(6, 182, 212, 0.15);color:#22d3ee;border: 1px solid rgba(6, 182, 212, 0.4)">PWM</span>
+            </td>
+            <td class="det">ADC3_IN14 · TIM1_CH2N<span class="note-tag">LED3</span></td>
+          </tr>
+          <tr>
+            <td><span class="pin-name">E11</span></td>
+            <td><span class="conn-badge">Left</span></td>
+            <td><span class="v33">3.3v</span></td>
+            <td><span class="func-tag"
+                style="background:rgba(37, 99, 235, 0.15);color:#60a5fa;border: 1px solid rgba(37, 99, 235, 0.4)">ADC</span><span
+                class="func-tag"
+                style="background:rgba(6, 182, 212, 0.15);color:#22d3ee;border: 1px solid rgba(6, 182, 212, 0.4)">PWM</span>
+            </td>
+            <td class="det">ADC3_IN15 · TIM1_CH2<span class="note-tag">LED5</span></td>
+          </tr>
+          <tr>
+            <td><span class="pin-name">E12</span></td>
+            <td><span class="conn-badge">Left2</span></td>
+            <td><span class="v33">3.3v</span></td>
+            <td><span class="func-tag"
+                style="background:rgba(37, 99, 235, 0.15);color:#60a5fa;border: 1px solid rgba(37, 99, 235, 0.4)">ADC</span><span
+                class="func-tag"
+                style="background:rgba(6, 182, 212, 0.15);color:#22d3ee;border: 1px solid rgba(6, 182, 212, 0.4)">PWM</span>
+            </td>
+            <td class="det">ADC3_IN16 · TIM1_CH3N</td>
+          </tr>
+          <tr>
+            <td><span class="pin-name">E13</span></td>
+            <td><span class="conn-badge">Left</span></td>
+            <td><span class="v33">3.3v</span></td>
+            <td><span class="func-tag"
+                style="background:rgba(37, 99, 235, 0.15);color:#60a5fa;border: 1px solid rgba(37, 99, 235, 0.4)">ADC</span><span
+                class="func-tag"
+                style="background:rgba(6, 182, 212, 0.15);color:#22d3ee;border: 1px solid rgba(6, 182, 212, 0.4)">PWM</span>
+            </td>
+            <td class="det">ADC3_IN3 · TIM1_CH3</td>
+          </tr>
+          <tr>
+            <td><span class="pin-name">F2</span></td>
+            <td><span class="conn-badge">Left2</span></td>
+            <td><span class="v33">3.3v</span></td>
+            <td><span class="func-tag"
+                style="background:rgba(37, 99, 235, 0.15);color:#60a5fa;border: 1px solid rgba(37, 99, 235, 0.4)">ADC</span>
+            </td>
+            <td class="det">ADC12_IN10</td>
+          </tr>
+          <tr>
+            <td><span class="pin-name">F4</span></td>
+            <td><span class="conn-badge">Left</span></td>
+            <td><span class="v33">3.3v</span></td>
+            <td><span class="func-tag"
+                style="background:rgba(37, 99, 235, 0.15);color:#60a5fa;border: 1px solid rgba(37, 99, 235, 0.4)">ADC</span>
+            </td>
+            <td class="det">ADC1_IN5</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Scroll to Top button -->
+  <button id="scrollToTop" class="scroll-btn visible" title="Back to top">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"
+      style="width:20px;height:20px;">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5"></path>
+    </svg>
+  </button>
+
+  <script>
+    // Premium Functional Badge Coloring Definitions
+    const FS = {
+      ADC: { bg: "rgba(37, 99, 235, 0.15)", fg: "#60a5fa", border: "rgba(37, 99, 235, 0.4)" },
+      DAC: { bg: "rgba(16, 185, 129, 0.15)", fg: "#34d399", border: "rgba(16, 185, 129, 0.4)" },
+      PWM: { bg: "rgba(6, 182, 212, 0.15)", fg: "#22d3ee", border: "rgba(6, 182, 212, 0.4)" },
+      SPI: { bg: "rgba(245, 158, 11, 0.15)", fg: "#fbbf24", border: "rgba(245, 158, 11, 0.4)" },
+      USART: { bg: "rgba(139, 92, 246, 0.15)", fg: "#a78bfa", border: "rgba(139, 92, 246, 0.4)" },
+      I2C: { bg: "rgba(239, 68, 68, 0.15)", fg: "#f87171", border: "rgba(239, 68, 68, 0.4)" },
+      CAN: { bg: "rgba(107, 114, 128, 0.15)", fg: "#9ca3af", border: "rgba(107, 114, 128, 0.4)" },
+    };
+
+    const PINS = [
+      ["A0", "Left2", false, ["ADC"], "ADC1_IN1", "BTN1"],
+      ["A1", "Left", false, ["ADC", "PWM"], "ADC1_IN2 · TIM15_CH1N · TIM2_CH2", ""],
+      ["A2", "Left2", false, ["ADC", "PWM", "USART"], "ADC1_IN3 · TIM15_CH1 · TIM2_CH3 · USART2_TX", ""],
+      ["A3", "Left", false, ["ADC", "PWM", "USART"], "ADC1_IN4 · TIM15_CH2 · TIM2_CH4 · USART2_RX", ""],
+      ["A4", "Left2", false, ["ADC", "DAC", "PWM", "USART"], "ADC2_IN1 · DAC1_OUT1 · TIM3_CH2 · USART2_CK", "AUDIO lrck"],
+      ["A5", "Left", false, ["ADC", "DAC", "SPI"], "ADC2_IN2 · DAC1_OUT2 · SPI1_SCK", "GYRO sck"],
+      ["A6", "Left2", false, ["ADC", "PWM", "SPI"], "ADC2_IN3 · TIM16_CH1 · TIM3_CH1 · SPI1_MISO", "GYRO miso"],
+      ["A7", "Left", false, ["ADC", "PWM", "SPI"], "ADC2_IN4 · TIM17_CH1 · TIM1_CH1N · TIM3_CH2 · TIM8_CH1N · SPI1_MOSI", "GYRO mosi"],
+      ["A8", "Right2", true, ["PWM", "USART"], "TIM1_CH1 · USART1_CK", ""],
+      ["A9", "Right", false, ["I2C", "PWM", "USART"], "I2C2_SCL · TIM1_CH2 · TIM2_CH3 · USART1_TX", "USB VBUS"],
+      ["A10", "Right2", false, ["I2C", "PWM", "USART"], "I2C2_SDA · TIM1_CH3 · TIM2_CH4 · USART1_RX", "USB ID"],
+      ["A11", "Right", true, ["CAN", "PWM"], "CAN_RX · TIM1_CH1N · TIM1_CH4 · TIM4_CH1", "USB D\u2212"],
+      ["A12", "Right2", true, ["CAN", "PWM"], "CAN_TX · TIM16_CH1 · TIM1_CH2N · TIM4_CH2", "USB D+"],
+      ["A13", "Right", true, ["PWM"], "TIM16_CH1N · TIM4_CH3", "JTAG MS"],
+      ["A14", "Right2", false, ["I2C", "PWM", "USART"], "I2C1_SDA · TIM8_CH2 · USART2_TX", "JTAG CK"],
+      ["A15", "Right", false, ["I2C", "PWM", "USART"], "I2C1_SCL · TIM8_CH1 · USART2_RX", "JTAG DI"],
+      ["B0", "Left2", false, ["ADC", "PWM"], "ADC3_IN12 · TIM1_CH2N · TIM3_CH3 · TIM8_CH2N", ""],
+      ["B1", "Left", false, ["ADC", "PWM"], "ADC3_IN1 · TIM1_CH3N · TIM3_CH4 · TIM8_CH3N", ""],
+      ["B2", "Left2", false, ["ADC"], "ADC2_IN12", ""],
+      ["B4", "Right2", true, ["PWM", "SPI", "USART"], "TIM16_CH1 · TIM3_CH1 · TIM8_CH2N · SPI1_MISO · SPI3_MISO · USART2_RX", ""],
+      ["B5", "Right", true, ["PWM", "SPI", "USART"], "TIM17_CH1 · TIM3_CH2 · TIM8_CH3N · SPI1_MOSI · SPI3_MOSI · USART2_CK", ""],
+      ["B6", "Right2", false, ["I2C", "PWM", "USART"], "I2C1_SCL · TIM16_CH1N · TIM4_CH1 · TIM8_CH1 · USART1_TX", "AUDIO scl"],
+      ["B7", "Right", false, ["I2C", "PWM", "USART"], "I2C1_SDA · TIM17_CH1N · TIM3_CH4 · TIM4_CH2 · USART1_RX", "MEMS sda"],
+      ["B8", "Right2", false, ["CAN", "I2C", "PWM"], "CAN_RX · I2C1_SCL · TIM16_CH1 · TIM4_CH3 · TIM8_CH2", ""],
+      ["B9", "Right", false, ["CAN", "I2C", "PWM"], "CAN_TX · I2C1_SDA · TIM17_CH1 · TIM4_CH4 · TIM8_CH3", "AUDIO sda"],
+      ["B10", "Left2", false, ["PWM", "USART"], "TIM2_CH3 · USART3_TX", "MIC dout"],
+      ["B11", "Left", false, ["PWM", "USART"], "TIM2_CH4 · USART3_RX", ""],
+      ["B12", "Left2", false, ["USART"], "USART3_CK", ""],
+      ["B13", "Left", false, ["ADC", "PWM", "SPI"], "ADC3_IN5 · TIM1_CH1N · SPI2_SCK", ""],
+      ["B14", "Left2", false, ["PWM", "SPI"], "TIM15_CH1 · TIM1_CH2N · SPI2_MISO", ""],
+      ["B15", "Left", false, ["PWM", "SPI"], "TIM15_CH1N · TIM15_CH2 · TIM1_CH3N · SPI2_MOSI", ""],
+      ["C0", "Left2", false, ["ADC"], "ADC12_IN6", "USB otg_pwr"],
+      ["C1", "Left", false, ["ADC"], "ADC12_IN7", ""],
+      ["C2", "Left2", false, ["ADC"], "ADC12_IN8", ""],
+      ["C3", "Left", false, ["ADC"], "ADC12_IN9", "MIC clk"],
+      ["C4", "Left2", false, ["ADC", "USART"], "ADC2_IN5 · USART1_TX", ""],
+      ["C5", "Left", false, ["ADC", "USART"], "ADC2_IN11 · USART1_RX", ""],
+      ["C6", "Left", true, ["PWM"], "TIM3_CH1 · TIM8_CH1", ""],
+      ["C7", "Left2", true, ["PWM"], "TIM3_CH2 · TIM8_CH2", "AUDIO mclk"],
+      ["C8", "Right2", true, ["PWM"], "TIM3_CH3 · TIM8_CH3", ""],
+      ["C9", "Right", true, ["PWM"], "TIM3_CH4 · TIM8_CH4", ""],
+      ["C10", "Right2", true, ["PWM", "SPI", "USART"], "TIM8_CH1N · SPI3_SCK · UART4_TX · USART3_TX", "AUDIO sclk"],
+      ["C11", "Right", true, ["PWM", "SPI", "USART"], "TIM8_CH2N · SPI3_MISO · UART4_RX · USART3_RX", ""],
+      ["C12", "Right2", true, ["PWM", "SPI", "USART"], "TIM8_CH3N · SPI3_MOSI · UART5_TX · USART3_CK", "AUDIO sdin"],
+      ["C13", "Right", false, ["PWM"], "TIM1_CH1N", ""],
+      ["C14", "Right2", false, [], "OSC_RTC", ""],
+      ["C15", "Right", false, [], "OSC_RTC", ""],
+      ["D0", "Right", true, ["CAN"], "CAN_RX", ""],
+      ["D1", "Right2", true, ["CAN", "PWM"], "CAN_TX · TIM8_CH4", ""],
+      ["D2", "Right", true, ["USART"], "UART5_RX", ""],
+      ["D3", "Right2", true, [], "GPIO", ""],
+      ["D4", "Right", true, ["PWM"], "TIM2_CH2", "AUDIO nrst"],
+      ["D5", "Right2", true, ["USART"], "USART2_TX", ""],
+      ["D7", "Right2", true, ["PWM", "USART"], "TIM2_CH3 · USART2_CK", ""],
+      ["D8", "Left2", false, ["USART"], "USART3_TX", ""],
+      ["D9", "Left", false, ["USART"], "USART3_RX", ""],
+      ["D10", "Left2", false, ["USART"], "USART3_CK", ""],
+      ["D11", "Left", false, [], "GPIO", ""],
+      ["D12", "Left2", false, ["PWM"], "TIM4_CH1", ""],
+      ["D13", "Left", false, ["PWM"], "TIM4_CH2", ""],
+      ["D14", "Left2", false, ["PWM"], "TIM4_CH3", ""],
+      ["D15", "Left", false, ["PWM"], "TIM4_CH4", ""],
+      ["E0", "Right2", true, ["PWM", "USART"], "TIM16_CH1 · USART1_TX", "GYRO int1"],
+      ["E1", "Right", true, ["PWM", "USART"], "TIM17_CH1 · USART1_RX", "GYRO int2"],
+      ["E2", "Right2", true, ["PWM"], "TIM3_CH1", "MEMS drdy"],
+      ["E3", "Right", true, ["PWM"], "TIM3_CH2", "GYRO cs"],
+      ["E4", "Right2", true, ["PWM"], "TIM3_CH3", "MEMS int1"],
+      ["E5", "Right", true, ["PWM"], "TIM3_CH4", "MEMS int2"],
+      ["E6", "Right2", true, [], "GPIO", ""],
+      ["E7", "Left", false, ["ADC"], "ADC3_IN13", ""],
+      ["E8", "Left2", false, ["PWM"], "TIM1_CH1N", "LED2"],
+      ["E9", "Left", false, ["ADC", "PWM"], "ADC3_IN2 · TIM1_CH1", "LED1"],
+      ["E10", "Left2", false, ["ADC", "PWM"], "ADC3_IN14 · TIM1_CH2N", "LED3"],
+      ["E11", "Left", false, ["ADC", "PWM"], "ADC3_IN15 · TIM1_CH2", "LED5"],
+      ["E12", "Left2", false, ["ADC", "PWM"], "ADC3_IN16 · TIM1_CH3N", ""],
+      ["E13", "Left", false, ["ADC", "PWM"], "ADC3_IN3 · TIM1_CH3", ""],
+      ["E14", "Left2", false, ["PWM"], "TIM1_CH4", "LED6"],
+      ["E15", "Left", false, ["USART"], "USART3_RX", "LED4"],
+      ["F0", "Off-board", false, ["I2C", "PWM"], "OSC · I2C2_SDA · TIM1_CH3N", ""],
+      ["F1", "Right", false, ["I2C"], "OSC · I2C2_SCL", ""],
+      ["F2", "Left2", false, ["ADC"], "ADC12_IN10", ""],
+      ["F3", "Off-board", true, [], "GPIO", ""],
+      ["F4", "Left", false, ["ADC"], "ADC1_IN5", ""],
+      ["F5", "Off-board", true, [], "GPIO", ""],
+      ["F6", "Right2", false, ["I2C", "PWM"], "I2C2_SCL · TIM4_CH4", ""],
+      ["F7", "Off-board", true, [], "GPIO", ""],
+      ["F8", "Off-board", true, [], "GPIO", ""],
+      ["F9", "Right2", true, ["PWM", "SPI"], "TIM15_CH1 · SPI2_SCK", ""],
+      ["F10", "Right", true, ["PWM", "SPI"], "TIM15_CH2 · SPI2_SCK", ""],
+    ];
+
+    const ALL_FUNCS = ["ADC", "DAC", "PWM", "SPI", "USART", "I2C", "CAN"];
+
+    let search = "", funcF = "All", connF = "All";
+
+    // Setup Filter Buttons Pills ONCE
+    function initPills() {
+      const container = document.getElementById("filterPills");
+      let html = `<button id="btn-All" class="filt-btn active" onclick="setFunc('All')">All</button>`;
+
+      ALL_FUNCS.forEach(f => {
+        html += `<button id="btn-${f}" class="filt-btn" onclick="setFunc('${f}')">${f}</button>`;
+      });
+
+      container.innerHTML = html;
+    }
+
+    function tag(f) {
+      const s = FS[f] || { bg: "#2a2a2a", fg: "#ffffff", border: "#3d3d3d" };
+      return `<span class="func-tag" style="background:${s.bg};color:${s.fg};border: 1px solid ${s.border}">${f}</span>`;
+    }
+
+    function row(p) {
+      const [pin, conn, v5, funcs, details, note] = p;
+      const tags = funcs.length ? funcs.map(tag).join("") : `<span class="func-tag" style="background: rgba(255,255,255,0.05); color: var(--text-tertiary); border: 1px dashed var(--border-dark)">GPIO</span>`;
+      const noteHtml = note ? `<span class="note-tag">${note}</span>` : "";
+      return `<tr>
+        <td><span class="pin-name">${pin}</span></td>
+        <td><span class="conn-badge">${conn}</span></td>
+        <td>${v5 ? '<span class="v5y">\u2713</span>' : '<span class="v33">3.3v</span>'}</td>
+        <td>${tags}</td>
+        <td class="det">${details}${noteHtml}</td>
+      </tr>`;
+    }
+
+    // Dynamic rendering of Table & Styles ONLY (preserves search input focus)
+    function renderTable() {
+      const s = search.toLowerCase();
+      const filtered = PINS.filter(p => {
+        const [pin, conn, , funcs, details, note] = p;
+        const ms = !s || pin.toLowerCase().includes(s) || details.toLowerCase().includes(s) || note.toLowerCase().includes(s) || funcs.some(f => f.toLowerCase().includes(s));
+        const mf = funcF === "All" || funcs.includes(funcF);
+        const mc = connF === "All" || conn === connF;
+        return ms && mf && mc;
+      });
+
+      // Update count line & table body rows without touching controls
+      document.getElementById("countLine").textContent = `${filtered.length} pin${filtered.length !== 1 ? "s" : ""} shown`;
+      document.getElementById("tableBody").innerHTML = filtered.map(row).join("");
+
+      // Update active styling of pills programmatically
+      const buttons = document.querySelectorAll(".filt-btn");
+      buttons.forEach(btn => {
+        const btnId = btn.id;
+        const fName = btnId.replace("btn-", "");
+
+        if (fName === funcF) {
+          btn.classList.add("active");
+          if (funcF !== "All") {
+            const clr = FS[funcF];
+            btn.style.cssText = `background:${clr.bg};color:${clr.fg};border-color:${clr.fg};box-shadow: 0 0 8px ${clr.bg}`;
+          } else {
+            btn.style.cssText = "";
+          }
+        } else {
+          btn.classList.remove("active");
+          btn.style.cssText = "";
+        }
+      });
+    }
+
+    // Input handlers
+    window.setSearch = v => { search = v; renderTable() };
+    window.setFunc = v => { funcF = v; renderTable() };
+    window.setConn = v => { connF = v; renderTable() };
+
+    // Scroll to Top Logic
+    const scrollBtn = document.getElementById("scrollToTop");
+    window.addEventListener("scroll", () => {
+      if (window.scrollY > 300) {
+        scrollBtn.classList.add("visible");
+      } else {
+        scrollBtn.classList.remove("visible");
+      }
+    });
+    scrollBtn.addEventListener("click", () => {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+
+    // Run Initial Setups
+    initPills();
+    renderTable();
+  </script>
+
+
+</body>
+
+</html>
