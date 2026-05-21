@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "motor_driver.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -54,7 +54,7 @@ TIM_HandleTypeDef htim3;
 PCD_HandleTypeDef hpcd_USB_FS;
 
 /* USER CODE BEGIN PV */
-
+Mecanum_Chassis_t chassis;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -117,7 +117,47 @@ int main(void)
   MX_TIM1_Init();
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
-
+  // Front-Left Motor (Motor 1)
+  chassis.fl.IN1_Port = GPIOD;
+  chassis.fl.IN1_Pin  = GPIO_PIN_2;
+  chassis.fl.IN2_Port = GPIOD;
+  chassis.fl.IN2_Pin  = GPIO_PIN_1;
+  chassis.fl.htim     = &htim2;
+  chassis.fl.channel  = TIM_CHANNEL_1;
+  chassis.fl.max_pwm  = 4800;
+  
+  // Front-Right Motor (Motor 2)
+  chassis.fr.IN1_Port = GPIOD;
+  chassis.fr.IN1_Pin  = GPIO_PIN_0;
+  chassis.fr.IN2_Port = GPIOC;
+  chassis.fr.IN2_Pin  = GPIO_PIN_12;
+  chassis.fr.htim     = &htim2;
+  chassis.fr.channel  = TIM_CHANNEL_2;
+  chassis.fr.max_pwm  = 4800;
+  
+  // Rear-Left Motor (Motor 3)
+  chassis.rl.IN1_Port = GPIOC;
+  chassis.rl.IN1_Pin  = GPIO_PIN_10;
+  chassis.rl.IN2_Port = GPIOC;
+  chassis.rl.IN2_Pin  = GPIO_PIN_11;
+  chassis.rl.htim     = &htim2;
+  chassis.rl.channel  = TIM_CHANNEL_3;
+  chassis.rl.max_pwm  = 4800;
+  
+  // Rear-Right Motor (Motor 4)
+  chassis.rr.IN1_Port = GPIOA;
+  chassis.rr.IN1_Pin  = GPIO_PIN_14;
+  chassis.rr.IN2_Port = GPIOA;
+  chassis.rr.IN2_Pin  = GPIO_PIN_15;
+  chassis.rr.htim     = &htim2;
+  chassis.rr.channel  = TIM_CHANNEL_4;
+  chassis.rr.max_pwm  = 4800;
+  
+  // Motor driver Enable/Standby Pin
+  chassis.STBY_Port   = GPIOD;
+  chassis.STBY_Pin    = GPIO_PIN_5;
+  
+  Chassis_Init(&chassis);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -127,6 +167,17 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    Chassis_Drive(&chassis, 2400, 0, 0);
+    HAL_Delay(2000);
+
+    Chassis_BrakeAll(&chassis);
+    HAL_Delay(1000);
+
+    Chassis_Drive(&chassis, -2400, 0, 0);
+    HAL_Delay(2000);
+
+    Chassis_BrakeAll(&chassis);
+    HAL_Delay(1000);
   }
   /* USER CODE END 3 */
 }
