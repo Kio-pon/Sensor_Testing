@@ -73,4 +73,62 @@ void Chassis_Drive(Mecanum_Chassis_t *chassis, int32_t vx, int32_t vy, int32_t o
  */
 void Chassis_BrakeAll(Mecanum_Chassis_t *chassis);
 
+/**
+ * @brief Drives the robot forward, brakes, then backward, then brakes.
+ * @param speed Range: [0, max_pwm]
+ * @param turn Range: [-max_pwm, max_pwm]
+ * @param duration_ms Time to drive in each direction
+ */
+void Chassis_DriveForwardBackward(Mecanum_Chassis_t *chassis, int32_t speed, int32_t turn, uint32_t duration_ms);
+
+/**
+ * @brief Strafes the robot right, brakes, then left, then brakes.
+ * @param speed Range: [0, max_pwm]
+ * @param turn Range: [-max_pwm, max_pwm]
+ * @param duration_ms Time to strafe in each direction
+ */
+void Chassis_DriveStrafe(Mecanum_Chassis_t *chassis, int32_t speed, int32_t turn, uint32_t duration_ms);
+
+/**
+ * @brief Drives the robot along the four diagonals in sequence.
+ * @param speed Range: [0, max_pwm]
+ * @param turn Range: [-max_pwm, max_pwm]
+ * @param duration_ms Time to drive along each diagonal
+ */
+void Chassis_DriveDiagonals(Mecanum_Chassis_t *chassis, int32_t speed, int32_t turn, uint32_t duration_ms);
+
+/**
+ * @brief Drives the robot at any arbitrary angle relative to the chassis using trigonometric kinematics.
+ * @param speed Range: [0, max_pwm]
+ * @param turn Range: [-max_pwm, max_pwm]
+ * @param angle_deg Direction of movement in degrees (0 = Strafe Right, 90 = Forward, 180 = Strafe Left, 270 = Backward)
+ * @param duration_ms Time to drive at this angle
+ */
+void Chassis_DriveArbitraryAngle(Mecanum_Chassis_t *chassis, int32_t speed, int32_t turn, float angle_deg, uint32_t duration_ms);
+
+/**
+ * @brief Drives the robot back-and-forth along the diameter of a circle at a specified angle.
+ * @param speed Range: [0, max_pwm]
+ * @param turn Range: [-max_pwm, max_pwm]
+ * @param diameter_angle_deg The angle of the diameter line in degrees (e.g. 90 = Up-Down diameter, 0 = Left-Right diameter)
+ * @param duration_ms Time to drive across the diameter in one direction
+ */
+void Chassis_DriveCircleDiameter(Mecanum_Chassis_t *chassis, int32_t speed, int32_t turn, float diameter_angle_deg, uint32_t duration_ms);
+
+/**
+ * @brief Pivot rotates the robot in place clockwise, brakes, then counter-clockwise, then brakes.
+ * @param turn Pivot turn speed/PWM magnitude. Range: [0, max_pwm]
+ * @param duration_ms Time to rotate in each direction
+ */
+void Chassis_RotateInPlace(Mecanum_Chassis_t *chassis, int32_t turn, uint32_t duration_ms);
+
+/**
+ * @brief Drives the robot forward and backward with a smooth PWM ramp-up and ramp-down.
+ * @param target_speed Peak speed/PWM to ramp up to. Range: [0, max_pwm]
+ * @param turn Turn bias. Range: [-max_pwm, max_pwm]
+ * @param duration_ms Duration to run at the peak target_speed
+ * @param ramp_time_ms Duration spent ramping up and ramping down
+ */
+void Chassis_DriveForwardBackwardRamped(Mecanum_Chassis_t *chassis, int32_t target_speed, int32_t turn, uint32_t duration_ms, uint32_t ramp_time_ms);
+
 #endif /* MOTOR_DRIVER_H */

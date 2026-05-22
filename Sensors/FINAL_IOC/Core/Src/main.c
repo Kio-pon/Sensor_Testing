@@ -167,17 +167,33 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    Chassis_Drive(&chassis, 2400, 0, 0);
-    HAL_Delay(2000);
-
-    Chassis_BrakeAll(&chassis);
+    // 1. Up and Down (Forward/Backward)
+    Chassis_DriveForwardBackward(&chassis, 2400, 0, 1500);
     HAL_Delay(1000);
 
-    Chassis_Drive(&chassis, -2400, 0, 0);
+    // 2. Right and Left (Strafing)
+    Chassis_DriveStrafe(&chassis, 2400, 0, 1500);
+    HAL_Delay(1000);
+
+    // 3. Diagonals (Four diagonal directions)
+    Chassis_DriveDiagonals(&chassis, 2400, 0, 1500);
+    HAL_Delay(1000);
+
+    // 4. Drive at Arbitrary Angle (e.g., 45 degrees - diagonal forward-right)
+    Chassis_DriveArbitraryAngle(&chassis, 2400, 0, 45.0f, 1500);
+    HAL_Delay(1000);
+
+    // 5. Circle's Diameter (Back and forth along a 120-degree diameter line)
+    Chassis_DriveCircleDiameter(&chassis, 2400, 0, 120.0f, 1500);
+    HAL_Delay(1000);
+
+    // 6. Rotate in Place (Clockwise then Counter-Clockwise pivot)
+    Chassis_RotateInPlace(&chassis, 2400, 1500);
     HAL_Delay(2000);
 
-    Chassis_BrakeAll(&chassis);
-    HAL_Delay(1000);
+    // 7. PWM Speed Control / Ramping (Forward and Backward with smooth acceleration/deceleration)
+    Chassis_DriveForwardBackwardRamped(&chassis, 2400, 0, 1500, 1000);
+    HAL_Delay(2000);
   }
   /* USER CODE END 3 */
 }
