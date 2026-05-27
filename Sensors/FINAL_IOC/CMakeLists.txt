@@ -50,10 +50,9 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/servo.c
     Core/Src/sharp_sensor.c
     Core/Src/tcs34725.c
-    Core/Src/robot_control.c
     # Add user sources here
-    Core/Src/motor_driver.c
 )
+
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE

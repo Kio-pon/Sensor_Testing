@@ -96,14 +96,14 @@ int _close(int file)
 }
 
 
-int _fstat(int file, struct stat *st)
+__attribute__((used)) int _fstat(int file, struct stat *st)
 {
   (void)file;
   st->st_mode = S_IFCHR;
   return 0;
 }
 
-int _isatty(int file)
+__attribute__((used)) int _isatty(int file)
 {
   (void)file;
   return 1;

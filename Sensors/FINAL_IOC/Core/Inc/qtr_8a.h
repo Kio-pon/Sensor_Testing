@@ -21,6 +21,9 @@ typedef struct {
     QTR_Sensor_t sensors[MAX_QTR_SENSORS]; /**< List of sensor configs */
     uint8_t num_sensors;                   /**< Number of active sensors */
     uint16_t threshold;                    /**< Brightness threshold */
+    uint16_t calibrated_minimums[MAX_QTR_SENSORS]; /**< Calibrated minimums (light/white) */
+    uint16_t calibrated_maximums[MAX_QTR_SENSORS]; /**< Calibrated maximums (dark/black) */
+    uint8_t is_calibrated;                 /**< Calibration status flag (1 if calibrated, 0 otherwise) */
 } QTR_Array_t;
 
 /**
@@ -29,10 +32,32 @@ typedef struct {
 void QTR_Init(QTR_Array_t *array, ADC_HandleTypeDef **hadc_list, const uint32_t *channels, uint8_t num_sensors, uint16_t threshold);
 
 /**
+ * @brief Performs an interactive manual sweeping calibration sequence over serial terminal.
+ * @param array Pointer to QTR_Array_t
+ * @param dma_buffer Raw DMA buffer to read from
+ * @param duration_ms Sweep window duration in milliseconds
+ * @param chassis Pointer to Mecanum_Chassis_t (passed as void* to avoid circular header dependency)
+ */
+void QTR_CalibrateSensorSweep(QTR_Array_t *array, volatile uint16_t *dma_buffer, uint32_t duration_ms, void *chassis);
+
+/**
+ * @brief Calibrates all three QTR arrays simultaneously using standard strafing at 20% speed
+ */
+void QTR_CalibrateAllThree(QTR_Array_t *front, QTR_Array_t *left, QTR_Array_t *right, volatile uint16_t *dma_buffer, uint32_t duration_ms, void *chassis);
+
+/**
  * @brief Reads raw analog values for the QTR Array
  * @param sensor_values Array to populate with raw 12-bit ADC values [0, 4095]
  */
 void QTR_ReadRaw(QTR_Array_t *array, uint16_t *sensor_values);
+
+/**
+ * @brief Reads calibrated (normalized) values scaled between [0, 1000] based on min/max
+ * @param array Pointer to QTR_Array_t
+ * @param calibrated_values Output array populated with [0, 1000] values (0 = pure white, 1000 = pure black)
+ * @param dma_buffer Raw DMA buffer to read from
+ */
+void QTR_ReadCalibrated(QTR_Array_t *array, uint16_t *calibrated_values, volatile uint16_t *dma_buffer);
 
 /**
  * @brief Reads the digital bitmask state of the array

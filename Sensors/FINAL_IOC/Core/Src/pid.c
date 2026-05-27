@@ -1,4 +1,6 @@
 #include "pid.h"
+#include <stddef.h>   /* NULL */
+
 
 void PID_Init(PID_t *pid, float kp, float ki, float kd, float max_integral, float max_output)
 {

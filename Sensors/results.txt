@@ -1,0 +1,9 @@
+| Project | Debug (-O0) | Release (-Os) | Fast (-O3 -flto) |
+|---|---|---|---|
+| Color_Sensor | 30696 B | 22168 B | 20448 B |
+| L298N | 41032 B | 27712 B | 24320 B |
+| Line_tracker | 38416 B | 26872 B | 24872 B |
+| Robot_Integration | FAIL B | FAIL B | FAIL B |
+| Servo | FAIL B | FAIL B | FAIL B |
+| Sharp Sensor | 38056 B | 26728 B | 24656 B |
+| FINAL_IOC | FAIL B | FAIL B | 9964 B |
