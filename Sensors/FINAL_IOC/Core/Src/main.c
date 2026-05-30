@@ -60,7 +60,6 @@ UART_HandleTypeDef huart1;
 PCD_HandleTypeDef hpcd_USB_FS;
 
 /* USER CODE BEGIN PV */
-UART_HandleTypeDef huart1;
 Mecanum_Chassis_t chassis;
 
 // Encoder counts - volatile prevents compiler optimising away in hot loop
@@ -72,8 +71,8 @@ QTR_Array_t qtr_front;
 QTR_Array_t qtr_left;
 QTR_Array_t qtr_right;
 
-// High-speed ADC1 DMA Ping-Pong buffer (8 channels * 2)
-#define SENSOR1_CHANNELS 8
+// High-speed ADC1 DMA Ping-Pong buffer (8 QTR sensors + 1 Sharp = 9 channels * 2)
+#define SENSOR1_CHANNELS 9
 volatile uint16_t adc1_dma_buffer[SENSOR1_CHANNELS * 2] = {0};
 volatile uint16_t sensor1_filtered[SENSOR1_CHANNELS] = {0};
 const float EMA_ALPHA = 0.25f;
@@ -105,7 +104,6 @@ static void MX_TIM1_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
-static void MX_USART1_UART_Init(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -172,7 +170,7 @@ int main(void)
   MX_USB_PCD_Init();
   MX_TIM1_Init();
   MX_TIM3_Init();
-  MX_USART1_UART_Init();
+  
   /* USER CODE BEGIN 2 */
   printf("INIT: CONFIGURING MOTOR CHASSIS & SENSORS...\r\n");
 
@@ -270,10 +268,9 @@ int main(void)
   QTR_Init(&qtr_right, qtr_right_adcs, qtr_right_ch, 6, 500);
   printf("DEBUG: RIGHT QTR_Init completed successfully!\r\n");
 
-  // Disable high-frequency DMA interrupts to prevent CPU starvation.
-  // Hardware circular DMA will still run in the background perfectly.
-  printf("DEBUG: Disabling DMA1_Channel1_IRQn interrupt in NVIC...\r\n");
-  HAL_NVIC_DisableIRQ(DMA1_Channel1_IRQn);
+  // Keep DMA IRQ enabled so ADC1 DMA ping-pong callbacks run.
+  // Hardware circular DMA will run and invoke HAL_ADC_ConvHalfCplt/ConvCplt.
+  printf("DEBUG: DMA1_Channel1_IRQn left enabled for ADC1 DMA callbacks.\r\n");
   
   // Start continuous circular DMA conversion for ADC1
   printf("DEBUG: Starting HAL_ADC_Start_DMA...\r\n");
@@ -290,144 +287,20 @@ int main(void)
   HAL_GPIO_Init(GPIOE, &GPIO_InitStructLED);
 
   // Perform autonomous sweep calibration for all 3 sensors using our 20% speed sideways strafe sweep!
+  printf("DEBUG: Starting QTR Autonomous Calibration Sweep...\r\n");
   QTR_CalibrateAllThree(&qtr_front, &qtr_left, &qtr_right, adc1_dma_buffer, 10000, &chassis);
-
-#if 0
-  // ── 4-LEG ENCODER-BASED MOTION TEST SEQUENCE ──────────────────────────────
-  {
-      printf("\r\n====================================================\r\n");
-      printf("      STARTING 4-LEG ENCODER MOTION TEST SUITE      \r\n");
-      printf("====================================================\r\n");
-      printf("One tire length = 866 ticks. Target 3 lengths = 2598 ticks.\r\n");
-      printf("Countdown 3 seconds...\r\n");
-      HAL_Delay(1000);
-      printf("2...\r\n");
-      HAL_Delay(1000);
-      printf("1...\r\n");
-      HAL_Delay(1000);
-
-      // Define standard C absolute value macro locally
-      #define ABS(x) ((x) < 0 ? -(x) : (x))
-
-      // High-speed encoder polling helper macro to keep pins updated in loop
-      #define POLL_ENCODERS() do { \
-          uint8_t curr_enc1 = (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_9)  << 1) | HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_10); \
-          if (curr_enc1 != local_prev_enc1) { enc1_count += Q_TABLE[local_prev_enc1][curr_enc1]; local_prev_enc1 = curr_enc1; } \
-          uint8_t curr_enc2 = (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8)  << 1) | HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_9); \
-          if (curr_enc2 != local_prev_enc2) { enc2_count -= Q_TABLE[local_prev_enc2][curr_enc2]; local_prev_enc2 = curr_enc2; } \
-          uint8_t curr_enc3 = (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_8)  << 1) | HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_7); \
-          if (curr_enc3 != local_prev_enc3) { enc3_count -= Q_TABLE[local_prev_enc3][curr_enc3]; local_prev_enc3 = curr_enc3; } \
-          uint8_t curr_enc4 = (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_6)  << 1) | HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_15); \
-          if (curr_enc4 != local_prev_enc4) { enc4_count += Q_TABLE[local_prev_enc4][curr_enc4]; local_prev_enc4 = curr_enc4; } \
-      } while(0)
-
-      uint8_t local_prev_enc1 = (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_9)  << 1) | HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_10);
-      uint8_t local_prev_enc2 = (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8)  << 1) | HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_9);
-      uint8_t local_prev_enc3 = (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_8)  << 1) | HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_7);
-      uint8_t local_prev_enc4 = (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_6)  << 1) | HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_15);
-
-      // --- LEG 1: FORWARD (3 tire lengths = 2598 ticks) ---
-      printf("\r\n[LEG 1/4] Driving FORWARD at 100%% speed...\r\n");
-      enc1_count = 0; enc2_count = 0; enc3_count = 0; enc4_count = 0;
-      Chassis_Drive(&chassis, 4800, 0, 0);
-      uint32_t last_print = HAL_GetTick();
-      while (1) {
-          POLL_ENCODERS();
-          int32_t traveled = (ABS(enc1_count) + ABS(enc2_count) + ABS(enc3_count) + ABS(enc4_count)) / 4;
-          uint32_t now = HAL_GetTick();
-          if (now - last_print >= 100) {
-              printf("  Ticks: FL=%ld, FR=%ld, RL=%ld, RR=%ld | Avg Abs Ticks: %ld / 2598\r\n",
-                     (long)enc4_count, (long)enc1_count, (long)enc3_count, (long)enc2_count, (long)traveled);
-              last_print = now;
-          }
-          if (traveled >= 2598) break;
-      }
-      Chassis_BrakeAll(&chassis);
-      printf("  Braked! Leg 1 complete.\r\n");
-      HAL_Delay(500); // 0.5s settling time
-
-      // --- LEG 2: BACKWARD (3 tire lengths = 2598 ticks) ---
-      printf("\r\n[LEG 2/4] Driving BACKWARD at 100%% speed...\r\n");
-      enc1_count = 0; enc2_count = 0; enc3_count = 0; enc4_count = 0;
-      Chassis_Drive(&chassis, -4800, 0, 0);
-      last_print = HAL_GetTick();
-      while (1) {
-          POLL_ENCODERS();
-          int32_t traveled = (ABS(enc1_count) + ABS(enc2_count) + ABS(enc3_count) + ABS(enc4_count)) / 4;
-          uint32_t now = HAL_GetTick();
-          if (now - last_print >= 100) {
-              printf("  Ticks: FL=%ld, FR=%ld, RL=%ld, RR=%ld | Avg Abs Ticks: %ld / 2598\r\n",
-                     (long)enc4_count, (long)enc1_count, (long)enc3_count, (long)enc2_count, (long)traveled);
-              last_print = now;
-          }
-          if (traveled >= 2598) break;
-      }
-      Chassis_BrakeAll(&chassis);
-      printf("  Braked! Leg 2 complete.\r\n");
-      HAL_Delay(500);
-
-      // --- LEG 3: RIGHT (3 tire lengths = 2598 ticks) ---
-      printf("\r\n[LEG 3/4] Strafing RIGHT at 100%% speed...\r\n");
-      enc1_count = 0; enc2_count = 0; enc3_count = 0; enc4_count = 0;
-      Chassis_Drive(&chassis, 0, 4800, 0);
-      last_print = HAL_GetTick();
-      while (1) {
-          POLL_ENCODERS();
-          int32_t traveled = (ABS(enc1_count) + ABS(enc2_count) + ABS(enc3_count) + ABS(enc4_count)) / 4;
-          uint32_t now = HAL_GetTick();
-          if (now - last_print >= 100) {
-              printf("  Ticks: FL=%ld, FR=%ld, RL=%ld, RR=%ld | Avg Abs Ticks: %ld / 2598\r\n",
-                     (long)enc4_count, (long)enc1_count, (long)enc3_count, (long)enc2_count, (long)traveled);
-              last_print = now;
-          }
-          if (traveled >= 2598) break;
-      }
-      Chassis_BrakeAll(&chassis);
-      printf("  Braked! Leg 3 complete.\r\n");
-      HAL_Delay(500);
-
-      // --- LEG 4: LEFT (3 tire lengths = 2598 ticks) ---
-      printf("\r\n[LEG 4/4] Strafing LEFT at 100%% speed...\r\n");
-      enc1_count = 0; enc2_count = 0; enc3_count = 0; enc4_count = 0;
-      Chassis_Drive(&chassis, 0, -4800, 0);
-      last_print = HAL_GetTick();
-      while (1) {
-          POLL_ENCODERS();
-          int32_t traveled = (ABS(enc1_count) + ABS(enc2_count) + ABS(enc3_count) + ABS(enc4_count)) / 4;
-          uint32_t now = HAL_GetTick();
-          if (now - last_print >= 100) {
-              printf("  Ticks: FL=%ld, FR=%ld, RL=%ld, RR=%ld | Avg Abs Ticks: %ld / 2598\r\n",
-                     (long)enc4_count, (long)enc1_count, (long)enc3_count, (long)enc2_count, (long)traveled);
-              last_print = now;
-          }
-          if (traveled >= 2598) break;
-      }
-      Chassis_BrakeAll(&chassis);
-      printf("  Braked! Leg 4 complete.\r\n");
-      HAL_Delay(500);
-
-      printf("\r\n====================================================\r\n");
-      printf("     ALL 4 LEGS COMPLETED! ENTERING STATIC MONITOR   \r\n");
-      printf("====================================================\r\n");
-      HAL_Delay(2000);
-  }
-#endif
+  printf("DEBUG: Calibration Sweep Completed successfully!\r\n");
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
-
-
   // Read initial pin states so we never count a false tick on first iteration
   uint8_t prev_enc1 = (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_9)  << 1) | HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_10);
   uint8_t prev_enc2 = (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8)  << 1) | HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_9);
   uint8_t prev_enc3 = (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_8)  << 1) | HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_7);
   uint8_t prev_enc4 = (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_6)  << 1) | HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_15);
-
-  uint32_t start_time = HAL_GetTick();
-  int motor_test_state = 0;
 
   while (1)
   {
@@ -436,180 +309,56 @@ int main(void)
     /* USER CODE BEGIN 3 */
     uint32_t current_time = HAL_GetTick();
 
-    // ── QTR SENSOR EMA FILTER POLLING (1 kHz) ───────────────────────────────
-    // Runs every 1ms to read from the continuous hardware circular DMA buffer.
-    static uint32_t last_adc_time = 0;
-    if (current_time - last_adc_time >= 1) {
-        uint16_t calibrated[SENSOR1_CHANNELS];
-        QTR_ReadCalibrated(&qtr_front, calibrated, adc1_dma_buffer);
-        for (int i = 0; i < SENSOR1_CHANNELS; i++) {
-            sensor1_filtered[i] = (uint16_t)((EMA_ALPHA * calibrated[i]) + ((1.0f - EMA_ALPHA) * sensor1_filtered[i]));
-        }
-        last_adc_time = current_time;
-    }
-
-    uint32_t elapsed = current_time - start_time;
+    // ADC1 filtering is handled in the DMA callbacks (HAL_ADC_ConvHalfCplt/ConvCplt).
+    // sensor1_filtered[] is updated in the background and ready to be used here.
 
     // ── 1. HIGH-SPEED ENCODER POLLING ───────────────────────────────────────
-    // Runs every loop iteration (100 kHz+). Cost: ~30 CPU cycles total.
-
-    // Encoder 1 – FR motor: Phase A = PA9, Phase B = PA10
     uint8_t curr_enc1 = (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_9)  << 1) | HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_10);
     if (curr_enc1 != prev_enc1) { enc1_count += Q_TABLE[prev_enc1][curr_enc1]; prev_enc1 = curr_enc1; }
 
-    // Encoder 2 – RR motor: Phase A = PA8, Phase B = PC9
-    // Note: Swapped phase pins in wiring. Inverting count direction to read positive when moving forward.
     uint8_t curr_enc2 = (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_8)  << 1) | HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_9);
     if (curr_enc2 != prev_enc2) { enc2_count -= Q_TABLE[prev_enc2][curr_enc2]; prev_enc2 = curr_enc2; }
 
-    // Encoder 3 – RL motor: Phase A = PC8, Phase B = PC7
-    // Note: Swapped phase pins in wiring. Inverting count direction to read positive when moving forward.
     uint8_t curr_enc3 = (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_8)  << 1) | HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_7);
     if (curr_enc3 != prev_enc3) { enc3_count -= Q_TABLE[prev_enc3][curr_enc3]; prev_enc3 = curr_enc3; }
 
-    // Encoder 4 – FL motor: Phase A = PC6, Phase B = PD15
     uint8_t curr_enc4 = (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_6)  << 1) | HAL_GPIO_ReadPin(GPIOD, GPIO_PIN_15);
     if (curr_enc4 != prev_enc4) { enc4_count += Q_TABLE[prev_enc4][curr_enc4]; prev_enc4 = curr_enc4; }
 
     // ── 2. DYNAMIC LINE-FOLLOWING CONTROLLER ─────────────────────────────────
-    // Read the line position (value ranges from 0 to 7000, center is 3500)
     float position = QTR_GetLinePosition(&qtr_front, (uint16_t*)sensor1_filtered);
-    
-    // Calculate alignment error
     float error = 3500.0f - position;
-    
-    // Base forward speed set to 50% custom scale (960 compare value)
     int32_t base_speed = 1200;
-
-    // Proportional gain - keep low to avoid overcorrection and oscillation.
     static const float Kp = 0.6f;
 
-    // Dead-band: if the robot is within ±200 of centre (3300-3700), drive dead straight.
-    // This stops the controller oscillating when it is already well-centred.
     int32_t omega;
     if (error > -200.0f && error < 200.0f) {
-        omega = 0;  // Already centred - no correction needed
+        omega = 0;  
     } else {
         omega = (int32_t)(Kp * error);
-        // Cap omega so it never exceeds base_speed (prevents spinning in place)
         if (omega >  base_speed) omega =  base_speed;
         if (omega < -base_speed) omega = -base_speed;
     }
     
-    // --- 90-Degree Turn Detection ---
-    // S0, S1 are leftmost sensors; S6, S7 are rightmost sensors.
-    // If they are strongly black, it's a 90-degree turn.
-    uint8_t left_90 = (sensor1_filtered[0] >= 750 && sensor1_filtered[1] >= 750);
-    uint8_t right_90 = (sensor1_filtered[6] >= 750 && sensor1_filtered[7] >= 750);
-    
-    // Check if the robot has lost the line (all 8 sensors detect white / less than 300)
     uint8_t all_white = 1;
     for (int i = 0; i < 8; i++) {
         if (sensor1_filtered[i] >= 300) {
-            all_white = 0; // Black line detected!
+            all_white = 0; 
             break;
         }
     }
     
-    if (left_90) {
-        printf(">>> 90-DEGREE LEFT TURN DETECTED! Ramping down...\r\n");
-        Chassis_SmoothStop(&chassis, base_speed, 0, omega, 180);
-        HAL_Delay(150);
-        
-        printf(">>> Strafing Left with Active Correction...\r\n");
-        // Start strafing left
-        Chassis_Drive(&chassis, 0, -750, 0);
-        HAL_Delay(350); // Get off the current line junction
-        
-        // Keep strafing left until the middle sensors re-detect the new line
-        uint32_t rotate_start = HAL_GetTick();
-        int32_t current_vx = 0;
-        while (HAL_GetTick() - rotate_start < 4000) { // 4s safety timeout
-            uint16_t calibrated[SENSOR1_CHANNELS];
-            QTR_ReadCalibrated(&qtr_front, calibrated, adc1_dma_buffer);
-            for (int i = 0; i < SENSOR1_CHANNELS; i++) {
-                sensor1_filtered[i] = (uint16_t)((EMA_ALPHA * calibrated[i]) + ((1.0f - EMA_ALPHA) * sensor1_filtered[i]));
-            }
-            
-            // Proportional forward/backward correction to stay centered on line while strafing
-            float position = QTR_GetLinePosition(&qtr_front, (uint16_t*)sensor1_filtered);
-            float error = 3500.0f - position;
-            int32_t vx_correction = (int32_t)(Kp * error);
-            if (vx_correction > 400) vx_correction = 400;
-            if (vx_correction < -400) vx_correction = -400;
-            current_vx = vx_correction;
-            
-            // Keep strafing left with active vx centering correction
-            Chassis_Drive(&chassis, vx_correction, -750, 0);
-            
-            // Check if middle sensors (S3 or S4) detect the new parallel line
-            if (sensor1_filtered[3] >= 550 || sensor1_filtered[4] >= 550) {
-                break; // Target line centered
-            }
-            HAL_Delay(5);
-        }
-        
-        // Smooth stop from the strafing motion
-        Chassis_SmoothStop(&chassis, current_vx, -750, 0, 180);
-        HAL_Delay(150);
-    } 
-    else if (right_90) {
-        printf(">>> 90-DEGREE RIGHT TURN DETECTED! Ramping down...\r\n");
-        Chassis_SmoothStop(&chassis, base_speed, 0, omega, 180);
-        HAL_Delay(150);
-        
-        printf(">>> Strafing Right with Active Correction...\r\n");
-        // Start strafing right
-        Chassis_Drive(&chassis, 0, 750, 0);
-        HAL_Delay(350); // Get off the current line junction
-        
-        // Keep strafing right until the middle sensors re-detect the new line
-        uint32_t rotate_start = HAL_GetTick();
-        int32_t current_vx = 0;
-        while (HAL_GetTick() - rotate_start < 4000) { // 4s safety timeout
-            uint16_t calibrated[SENSOR1_CHANNELS];
-            QTR_ReadCalibrated(&qtr_front, calibrated, adc1_dma_buffer);
-            for (int i = 0; i < SENSOR1_CHANNELS; i++) {
-                sensor1_filtered[i] = (uint16_t)((EMA_ALPHA * calibrated[i]) + ((1.0f - EMA_ALPHA) * sensor1_filtered[i]));
-            }
-            
-            // Proportional forward/backward correction to stay centered on line while strafing
-            float position = QTR_GetLinePosition(&qtr_front, (uint16_t*)sensor1_filtered);
-            float error = 3500.0f - position;
-            int32_t vx_correction = (int32_t)(Kp * error);
-            if (vx_correction > 400) vx_correction = 400;
-            if (vx_correction < -400) vx_correction = -400;
-            current_vx = vx_correction;
-            
-            // Keep strafing right with active vx centering correction
-            Chassis_Drive(&chassis, vx_correction, 750, 0);
-            
-            // Check if middle sensors (S3 or S4) detect the new parallel line
-            if (sensor1_filtered[3] >= 550 || sensor1_filtered[4] >= 550) {
-                break; // Target line centered
-            }
-            HAL_Delay(5);
-        }
-        
-        // Smooth stop from the strafing motion
-        Chassis_SmoothStop(&chassis, current_vx, 750, 0, 180);
-        HAL_Delay(150);
-    }
-    else if (all_white) {
-        // Stop the car immediately (short brake) to prevent runaway off-line
-        Chassis_Drive(&chassis, 0, 0, 0);
+    if (all_white) {
+        Chassis_Drive(&chassis, 0, 0, 0); // Safe brake to prevent runaway when line is lost
     } else {
-        // Drive the robot dynamically using base forward speed and responsive turning correction
         Chassis_Drive(&chassis, base_speed, 0, omega);
     }
 
-    // Calculate individual commanded motor speeds
     int32_t fl_cmd = base_speed - omega;
     int32_t fr_cmd = base_speed + omega;
     int32_t rl_cmd = base_speed - omega;
     int32_t rr_cmd = base_speed + omega;
 
-    // Helper macro to calculate physical scaled PWM (50% stiction bypass)
     #define GET_PHYSICAL_PWM(s) ((s) > 0 ? (240000 + 50 * (s)) / 100 : ((s) < 0 ? -((240000 + 50 * (-(s))) / 100) : 0))
 
     int32_t fl_phys = GET_PHYSICAL_PWM(fl_cmd);
@@ -617,24 +366,18 @@ int main(void)
     int32_t rl_phys = GET_PHYSICAL_PWM(rl_cmd);
     int32_t rr_phys = GET_PHYSICAL_PWM(rr_cmd);
 
-    // Map the 8 QTR sensors to the 8 Discovery LEDs (PE8 to PE15)
-    // If a sensor detects the black line (value >= 500), light up its corresponding LED!
     uint16_t led_mask = 0;
     for (int i = 0; i < 8; i++) {
         if (sensor1_filtered[i] >= 500) {
-            led_mask |= (1 << (8 + i)); // PE8 starts at bit 8
+            led_mask |= (1 << (8 + i)); 
         }
     }
     
-    // Set user LED states atomically on GPIOE (Port E)
     GPIOE->ODR = (GPIOE->ODR & ~0xFF00) | led_mask;
 
     // ── 3. LED HEARTBEAT & DIAGNOSTIC PRINTF ─────────────────────────────────
-    // Toggle diagnostic dashboard print every 200ms
     static uint32_t last_led_time = 0;
     if (current_time - last_led_time >= 200) {
-        // Clear the screen completely once when launching the dashboard to wipe
-        // old prints, then use top-left overwrite for zero-flicker live updates!
         static uint8_t first_dashboard_draw = 1;
         if (first_dashboard_draw) {
             printf("\033[2J\033[H");
@@ -653,6 +396,8 @@ int main(void)
         printf(" LINE POSITION  : %6.1f / 7000 (3500 is Center)     \r\n", (double)position);
         printf(" ALIGNMENT ERROR: %6.1f                            \r\n", (double)error);
         printf(" TURN COMMAND   : %6ld (omega)                      \r\n", (long)omega);
+        printf("----------------------------------------------------\r\n");
+        printf(" SHARP DISTANCE 1: %4d Raw Ticks                    \r\n", (int)sensor1_filtered[8]);
         printf("----------------------------------------------------\r\n");
         printf(" INDIVIDUAL MOTOR SPEEDS (COMMANDED vs PHYSICAL):   \r\n");
         printf("   FL Motor: Cmd=%4ld | Phys=%4ld (%2ld%% PWM)       \r\n", (long)fl_cmd, (long)fl_phys, (long)(fl_phys * 100 / 4800));
@@ -745,17 +490,8 @@ void SystemClock_Config(void)
   */
 static void MX_ADC1_Init(void)
 {
-
-  /* USER CODE BEGIN ADC1_Init 0 */
-
-  /* USER CODE END ADC1_Init 0 */
-
   ADC_MultiModeTypeDef multimode = {0};
   ADC_ChannelConfTypeDef sConfig = {0};
-
-  /* USER CODE BEGIN ADC1_Init 1 */
-
-  /* USER CODE END ADC1_Init 1 */
 
   /** Common config
   */
@@ -768,7 +504,7 @@ static void MX_ADC1_Init(void)
   hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
   hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
   hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-  hadc1.Init.NbrOfConversion = 8;
+  hadc1.Init.NbrOfConversion = 9;
   hadc1.Init.DMAContinuousRequests = ENABLE;
   hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
   hadc1.Init.LowPowerAutoWait = DISABLE;
@@ -791,7 +527,7 @@ static void MX_ADC1_Init(void)
   sConfig.Channel = ADC_CHANNEL_2;
   sConfig.Rank = ADC_REGULAR_RANK_1;
   sConfig.SingleDiff = ADC_SINGLE_ENDED;
-  sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
+  sConfig.SamplingTime = ADC_SAMPLETIME_181CYCLES_5;
   sConfig.OffsetNumber = ADC_OFFSET_NONE;
   sConfig.Offset = 0;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
@@ -861,10 +597,15 @@ static void MX_ADC1_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN ADC1_Init 2 */
 
-  /* USER CODE END ADC1_Init 2 */
-
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_10;
+  sConfig.Rank = ADC_REGULAR_RANK_9;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
 }
 
 /**
@@ -874,16 +615,7 @@ static void MX_ADC1_Init(void)
   */
 static void MX_ADC2_Init(void)
 {
-
-  /* USER CODE BEGIN ADC2_Init 0 */
-
-  /* USER CODE END ADC2_Init 0 */
-
   ADC_ChannelConfTypeDef sConfig = {0};
-
-  /* USER CODE BEGIN ADC2_Init 1 */
-
-  /* USER CODE END ADC2_Init 1 */
 
   /** Common config
   */
@@ -918,10 +650,6 @@ static void MX_ADC2_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN ADC2_Init 2 */
-
-  /* USER CODE END ADC2_Init 2 */
-
 }
 
 /**
@@ -931,17 +659,8 @@ static void MX_ADC2_Init(void)
   */
 static void MX_ADC3_Init(void)
 {
-
-  /* USER CODE BEGIN ADC3_Init 0 */
-
-  /* USER CODE END ADC3_Init 0 */
-
   ADC_MultiModeTypeDef multimode = {0};
   ADC_ChannelConfTypeDef sConfig = {0};
-
-  /* USER CODE BEGIN ADC3_Init 1 */
-
-  /* USER CODE END ADC3_Init 1 */
 
   /** Common config
   */
@@ -984,10 +703,6 @@ static void MX_ADC3_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN ADC3_Init 2 */
-
-  /* USER CODE END ADC3_Init 2 */
-
 }
 
 /**
@@ -997,16 +712,7 @@ static void MX_ADC3_Init(void)
   */
 static void MX_ADC4_Init(void)
 {
-
-  /* USER CODE BEGIN ADC4_Init 0 */
-
-  /* USER CODE END ADC4_Init 0 */
-
   ADC_ChannelConfTypeDef sConfig = {0};
-
-  /* USER CODE BEGIN ADC4_Init 1 */
-
-  /* USER CODE END ADC4_Init 1 */
 
   /** Common config
   */
@@ -1031,7 +737,7 @@ static void MX_ADC4_Init(void)
 
   /** Configure Regular Channel
   */
-  sConfig.Channel = ADC_CHANNEL_1;
+  sConfig.Channel = ADC_CHANNEL_2;
   sConfig.Rank = ADC_REGULAR_RANK_1;
   sConfig.SingleDiff = ADC_SINGLE_ENDED;
   sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
@@ -1041,10 +747,6 @@ static void MX_ADC4_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN ADC4_Init 2 */
-
-  /* USER CODE END ADC4_Init 2 */
-
 }
 
 /**
@@ -1054,14 +756,6 @@ static void MX_ADC4_Init(void)
   */
 static void MX_I2C1_Init(void)
 {
-
-  /* USER CODE BEGIN I2C1_Init 0 */
-
-  /* USER CODE END I2C1_Init 0 */
-
-  /* USER CODE BEGIN I2C1_Init 1 */
-
-  /* USER CODE END I2C1_Init 1 */
   hi2c1.Instance = I2C1;
   hi2c1.Init.Timing = 0x00201D2B;
   hi2c1.Init.OwnAddress1 = 0;
@@ -1089,10 +783,6 @@ static void MX_I2C1_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN I2C1_Init 2 */
-
-  /* USER CODE END I2C1_Init 2 */
-
 }
 
 /**
@@ -1102,17 +792,9 @@ static void MX_I2C1_Init(void)
   */
 static void MX_TIM1_Init(void)
 {
-
-  /* USER CODE BEGIN TIM1_Init 0 */
-
-  /* USER CODE END TIM1_Init 0 */
-
   TIM_ClockConfigTypeDef sClockSourceConfig = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
 
-  /* USER CODE BEGIN TIM1_Init 1 */
-
-  /* USER CODE END TIM1_Init 1 */
   htim1.Instance = TIM1;
   htim1.Init.Prescaler = 0;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
@@ -1136,10 +818,6 @@ static void MX_TIM1_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN TIM1_Init 2 */
-
-  /* USER CODE END TIM1_Init 2 */
-
 }
 
 /**
@@ -1149,18 +827,10 @@ static void MX_TIM1_Init(void)
   */
 static void MX_TIM2_Init(void)
 {
-
-  /* USER CODE BEGIN TIM2_Init 0 */
-
-  /* USER CODE END TIM2_Init 0 */
-
   TIM_ClockConfigTypeDef sClockSourceConfig = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
   TIM_OC_InitTypeDef sConfigOC = {0};
 
-  /* USER CODE BEGIN TIM2_Init 1 */
-
-  /* USER CODE END TIM2_Init 1 */
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 0;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
@@ -1206,11 +876,7 @@ static void MX_TIM2_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN TIM2_Init 2 */
-
-  /* USER CODE END TIM2_Init 2 */
   HAL_TIM_MspPostInit(&htim2);
-
 }
 
 /**
@@ -1220,18 +886,10 @@ static void MX_TIM2_Init(void)
   */
 static void MX_TIM3_Init(void)
 {
-
-  /* USER CODE BEGIN TIM3_Init 0 */
-
-  /* USER CODE END TIM3_Init 0 */
-
   TIM_ClockConfigTypeDef sClockSourceConfig = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
   TIM_OC_InitTypeDef sConfigOC = {0};
 
-  /* USER CODE BEGIN TIM3_Init 1 */
-
-  /* USER CODE END TIM3_Init 1 */
   htim3.Instance = TIM3;
   htim3.Init.Prescaler = 47;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
@@ -1269,11 +927,7 @@ static void MX_TIM3_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN TIM3_Init 2 */
-
-  /* USER CODE END TIM3_Init 2 */
   HAL_TIM_MspPostInit(&htim3);
-
 }
 
 /**
@@ -1283,14 +937,6 @@ static void MX_TIM3_Init(void)
   */
 static void MX_USART1_UART_Init(void)
 {
-
-  /* USER CODE BEGIN USART1_Init 0 */
-
-  /* USER CODE END USART1_Init 0 */
-
-  /* USER CODE BEGIN USART1_Init 1 */
-
-  /* USER CODE END USART1_Init 1 */
   huart1.Instance = USART1;
   huart1.Init.BaudRate = 115200;
   huart1.Init.WordLength = UART_WORDLENGTH_8B;
@@ -1305,10 +951,6 @@ static void MX_USART1_UART_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN USART1_Init 2 */
-
-  /* USER CODE END USART1_Init 2 */
-
 }
 
 /**
@@ -1318,14 +960,6 @@ static void MX_USART1_UART_Init(void)
   */
 static void MX_USB_PCD_Init(void)
 {
-
-  /* USER CODE BEGIN USB_Init 0 */
-
-  /* USER CODE END USB_Init 0 */
-
-  /* USER CODE BEGIN USB_Init 1 */
-
-  /* USER CODE END USB_Init 1 */
   hpcd_USB_FS.Instance = USB;
   hpcd_USB_FS.Init.dev_endpoints = 8;
   hpcd_USB_FS.Init.speed = PCD_SPEED_FULL;
@@ -1336,10 +970,6 @@ static void MX_USB_PCD_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN USB_Init 2 */
-
-  /* USER CODE END USB_Init 2 */
-
 }
 
 /**
@@ -1347,7 +977,6 @@ static void MX_USB_PCD_Init(void)
   */
 static void MX_DMA_Init(void)
 {
-
   /* DMA controller clock enable */
   __HAL_RCC_DMA1_CLK_ENABLE();
 
@@ -1355,7 +984,6 @@ static void MX_DMA_Init(void)
   /* DMA1_Channel1_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
-
 }
 
 /**
@@ -1366,9 +994,6 @@ static void MX_DMA_Init(void)
 static void MX_GPIO_Init(void)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
-  /* USER CODE BEGIN MX_GPIO_Init_1 */
-
-  /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOE_CLK_ENABLE();
@@ -1417,8 +1042,7 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PD8 PD9 PD0 PD1
-                           PD2 PD5 */
+  /*Configure GPIO pins : PD8 PD9 PD0 PD1 PD2 PD5 */
   GPIO_InitStruct.Pin = GPIO_PIN_8|GPIO_PIN_9|GPIO_PIN_0|GPIO_PIN_1
                           |GPIO_PIN_2|GPIO_PIN_5;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
@@ -1464,42 +1088,44 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-
-  /* USER CODE BEGIN MX_GPIO_Init_2 */
-
-  /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc)
 {
     if (hadc->Instance == ADC1) {
-        // Process first half: indices 0 to 7
-        for (int i = 0; i < SENSOR1_CHANNELS; i++) {
-            uint16_t raw = adc1_dma_buffer[i];
-            sensor1_filtered[i] = (uint16_t)((EMA_ALPHA * raw) + ((1.0f - EMA_ALPHA) * sensor1_filtered[i]));
+        uint16_t calibrated[8];
+        // 1. Calibrate the raw QTR data from the first half of the circular DMA buffer (index 0)
+        QTR_ReadCalibrated(&qtr_front, calibrated, (uint16_t*)&adc1_dma_buffer[0]);
+        
+        // 2. Filter the newly calibrated readings into our tracking array
+        for (int i = 0; i < 8; i++) {
+            sensor1_filtered[i] = (uint16_t)((EMA_ALPHA * calibrated[i]) + ((1.0f - EMA_ALPHA) * sensor1_filtered[i]));
         }
+        
+        // 3. Filter the raw Sharp 1 distance sensor sitting safely at index 8
+        uint16_t sharp_raw = adc1_dma_buffer[8];
+        sensor1_filtered[8] = (uint16_t)((EMA_ALPHA * sharp_raw) + ((1.0f - EMA_ALPHA) * sensor1_filtered[8]));
     }
 }
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
     if (hadc->Instance == ADC1) {
-        // Process second half: indices 8 to 15
-        for (int i = 0; i < SENSOR1_CHANNELS; i++) {
-            uint16_t raw = adc1_dma_buffer[SENSOR1_CHANNELS + i];
-            sensor1_filtered[i] = (uint16_t)((EMA_ALPHA * raw) + ((1.0f - EMA_ALPHA) * sensor1_filtered[i]));
+        uint16_t calibrated[8];
+        // 1. Calibrate the raw QTR data from the second half of the circular DMA buffer (index 9)
+        QTR_ReadCalibrated(&qtr_front, calibrated, (uint16_t*)&adc1_dma_buffer[SENSOR1_CHANNELS]);
+        
+        // 2. Filter the newly calibrated readings into our tracking array
+        for (int i = 0; i < 8; i++) {
+            sensor1_filtered[i] = (uint16_t)((EMA_ALPHA * calibrated[i]) + ((1.0f - EMA_ALPHA) * sensor1_filtered[i]));
         }
+        
+        // 3. Filter the raw Sharp 1 distance sensor sitting safely at index 17
+        uint16_t sharp_raw = adc1_dma_buffer[17];
+        sensor1_filtered[8] = (uint16_t)((EMA_ALPHA * sharp_raw) + ((1.0f - EMA_ALPHA) * sensor1_filtered[8]));
     }
 }
-
-
-int __io_putchar(int ch)
-{
-  HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
-  return ch;
-}
-
 /* USER CODE END 4 */
 
 /**
@@ -1509,17 +1135,17 @@ int __io_putchar(int ch)
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
   while (1)
   {
   }
   /* USER CODE END Error_Handler_Debug */
 }
+
 #ifdef USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
-  *         where the assert_param error has occurred.
+  * where the assert_param error has occurred.
   * @param  file: pointer to the source file name
   * @param  line: assert_param error line source number
   * @retval None
@@ -1527,8 +1153,6 @@ void Error_Handler(void)
 void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */
-  /* User can add his own implementation to report the file name and line number,
-     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
