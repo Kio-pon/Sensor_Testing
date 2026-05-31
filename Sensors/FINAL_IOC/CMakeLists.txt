@@ -48,8 +48,9 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/pid.c
     Core/Src/qtr_8a.c
     Core/Src/servo.c
-    Core/Src/sharp_sensor.c
     Core/Src/tcs34725.c
+    Core/Src/encoders.c
+    Core/Src/robot_core.c
     # Add user sources here
 )
 

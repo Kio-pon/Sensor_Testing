@@ -1,4 +1,5 @@
 #include "motor_driver.h"
+#include "encoders.h"
 #include <stddef.h>
 #include <math.h>
 #include <stdio.h>
@@ -434,10 +435,7 @@ void Chassis_DriveOptimizedDPad(Mecanum_Chassis_t *chassis, int x, int y, float 
 }
 
 // Global encoder variables from main.c
-extern volatile int32_t enc1_count; // FR
-extern volatile int32_t enc2_count; // RR
-extern volatile int32_t enc3_count; // RL
-extern volatile int32_t enc4_count; // FL
+/* encoder counters are declared in encoders.h and defined in encoders.c */
 
 float Encoder_CalculateRPM(int32_t ticks_diff, float ppr, float gear_ratio, float dt_sec)
 {
