@@ -25,6 +25,7 @@
 #include "qtr_8a.h"
 #include "stm32f303xc.h"
 #include <stdio.h>
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -125,6 +126,22 @@ void Chassis_SmoothStop(Mecanum_Chassis_t *ch, int32_t start_vx, int32_t start_v
         HAL_Delay(step_delay);
     }
     Chassis_Drive(ch, 0, 0, 0);
+}
+
+static bool QTR_CenterSensorsActive(QTR_Array_t *array, uint16_t *calibrated_values, uint16_t threshold)
+{
+    if (array == NULL || calibrated_values == NULL) return false;
+    uint8_t mid = array->num_sensors / 2;
+    uint8_t left_center = (mid == 0) ? 0 : mid - 1;
+    uint8_t right_center = mid;
+    if (left_center < array->num_sensors && calibrated_values[left_center] >= threshold) return true;
+    if (right_center < array->num_sensors && calibrated_values[right_center] >= threshold) return true;
+    return false;
+}
+
+static bool QTR_PositionCentered(float position, float deadband)
+{
+    return (position >= 3500.0f - deadband) && (position <= 3500.0f + deadband);
 }
 /* USER CODE END 0 */
 
@@ -330,28 +347,68 @@ int main(void)
     float error = 3500.0f - position;
     int32_t base_speed = 1200;
     static const float Kp = 0.6f;
+    static const float center_deadband = 900.0f; // Accept a wide center region while turning
+    static const uint16_t side_detect_threshold = 650;
+    static const int32_t rotate_speed = 900;
+    static enum { TRACK_LINE, TURN_LEFT, TURN_RIGHT } turn_state = TRACK_LINE;
 
     int32_t omega;
     if (error > -200.0f && error < 200.0f) {
-        omega = 0;  
+        omega = 0;
     } else {
         omega = (int32_t)(Kp * error);
         if (omega >  base_speed) omega =  base_speed;
         if (omega < -base_speed) omega = -base_speed;
     }
-    
+
+    uint16_t left_cal[8] = {0};
+    uint16_t right_cal[8] = {0};
+    QTR_ReadCalibrated(&qtr_left, left_cal, NULL);
+    QTR_ReadCalibrated(&qtr_right, right_cal, NULL);
+
+    bool left_center_hit = QTR_CenterSensorsActive(&qtr_left, left_cal, side_detect_threshold);
+    bool right_center_hit = QTR_CenterSensorsActive(&qtr_right, right_cal, side_detect_threshold);
+
     uint8_t all_white = 1;
     for (int i = 0; i < 8; i++) {
         if (sensor1_filtered[i] >= 300) {
-            all_white = 0; 
+            all_white = 0;
             break;
         }
     }
-    
-    if (all_white) {
-        Chassis_Drive(&chassis, 0, 0, 0); // Safe brake to prevent runaway when line is lost
-    } else {
-        Chassis_Drive(&chassis, base_speed, 0, omega);
+
+    bool front_centered = !all_white && QTR_PositionCentered(position, center_deadband);
+
+    switch (turn_state) {
+        case TRACK_LINE:
+            if (left_center_hit && !right_center_hit) {
+                turn_state = TURN_LEFT;
+                printf("TURN DETECTED: LEFT\r\n");
+            } else if (right_center_hit && !left_center_hit) {
+                turn_state = TURN_RIGHT;
+                printf("TURN DETECTED: RIGHT\r\n");
+            } else if (all_white) {
+                Chassis_Drive(&chassis, 0, 0, 0);
+            } else {
+                Chassis_Drive(&chassis, base_speed, 0, omega);
+            }
+            break;
+
+        case TURN_LEFT:
+            Chassis_Drive(&chassis, 0, 0, -rotate_speed);
+            if (front_centered) {
+                turn_state = TRACK_LINE;
+                printf("TURN COMPLETE: RETURN TO LINE FOLLOWING\r\n");
+            }
+            break;
+
+        case TURN_RIGHT:
+            Chassis_Drive(&chassis, 0, 0, rotate_speed);
+            if (front_centered) {
+                turn_state = TRACK_LINE;
+                printf("TURN COMPLETE: RETURN TO LINE FOLLOWING\r\n");
+            }
+            break;
     }
 
     int32_t fl_cmd = base_speed - omega;

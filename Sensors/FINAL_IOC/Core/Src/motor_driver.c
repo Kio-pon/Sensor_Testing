@@ -114,11 +114,11 @@ void Chassis_Drive(Mecanum_Chassis_t *chassis, int32_t vx, int32_t vy, int32_t o
     vy = -vy;
     omega = -omega;
     
-    // Mecanum Kinematic formulas
-    int32_t fl_speed = vx + vy - omega;
-    int32_t fr_speed = vx - vy + omega;
-    int32_t rl_speed = vx - vy - omega;
-    int32_t rr_speed = vx + vy + omega;
+    // Mecanum Kinematic formulas with motor speed trim factors
+    int32_t fl_speed = (int32_t)((vx + vy - omega) * MOTOR_FL_TRIM);
+    int32_t fr_speed = (int32_t)((vx - vy + omega) * MOTOR_FR_TRIM);
+    int32_t rl_speed = (int32_t)((vx - vy - omega) * MOTOR_RL_TRIM);
+    int32_t rr_speed = (int32_t)((vx + vy + omega) * MOTOR_RR_TRIM);
     
     Motor_SetSpeed(&chassis->fl, fl_speed);
     Motor_SetSpeed(&chassis->fr, fr_speed);
