@@ -2,11 +2,12 @@
 #define MOTOR_DRIVER_H
 
 #include "main.h"
+#include "robot_config.h"
 
-// ── Physical Motor & Wheel Calibration Constants ──────────────────────────────
-#define MOTOR_PPR         11.0f  // Base magnetic encoder PPR
-#define MOTOR_GEAR_RATIO  19.7f  // Calibrated gearbox ratio for exactly 866.8 ticks/turn
-#define WHEEL_DIAMETER    0.08f  // 80mm wheel diameter in meters
+// ── Physical Motor & Wheel Calibration Constants (Centralized in robot_config.h) ──
+#define MOTOR_PPR         ENCODER_PPR
+#define MOTOR_GEAR_RATIO  GEAR_RATIO
+#define WHEEL_DIAMETER    (WHEEL_DIAMETER_MM / 1000.0f) // 80mm wheel diameter in meters
 
 // ── Motor Speed Trim Factors ─────────────────────────────────────────────────
 // Compensate for friction/wear differences between identical motors
