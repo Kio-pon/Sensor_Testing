@@ -8,6 +8,17 @@
 #define MOTOR_GEAR_RATIO  19.7f  // Calibrated gearbox ratio for exactly 866.8 ticks/turn
 #define WHEEL_DIAMETER    0.08f  // 80mm wheel diameter in meters
 
+// ── Motor Speed Trim Factors ─────────────────────────────────────────────────
+// Compensate for friction/wear differences between identical motors
+// Adjust these values if robot curves left/right during straight-line movement
+// Range: 0.85 to 1.15 (85% to 115% of nominal speed)
+// If curving RIGHT: increase LEFT side (FL/RL) or decrease RIGHT side (FR/RR)
+// If curving LEFT:  increase RIGHT side (FR/RR) or decrease LEFT side (FL/RL)
+#define MOTOR_FL_TRIM     1.03f  // Front-Left trim
+#define MOTOR_FR_TRIM     1.00f  // Front-Right trim
+#define MOTOR_RL_TRIM     1.03f  // Rear-Left trim
+#define MOTOR_RR_TRIM     1.00f  // Rear-Right trim
+
 /**
  * @brief TB6612FNG Single Motor structure
  */

@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "robot_core.h"
 #include <stdio.h>
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
