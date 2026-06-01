@@ -157,6 +157,7 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
     Robot_RunLoop();
+  }
   /* USER CODE END 3 */
 }
 
