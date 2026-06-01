@@ -15,9 +15,9 @@
 // Range: 0.85 to 1.15 (85% to 115% of nominal speed)
 // If curving RIGHT: increase LEFT side (FL/RL) or decrease RIGHT side (FR/RR)
 // If curving LEFT:  increase RIGHT side (FR/RR) or decrease LEFT side (FL/RL)
-#define MOTOR_FL_TRIM     1.03f  // Front-Left trim
+#define MOTOR_FL_TRIM     1.00f  // Front-Left trim
 #define MOTOR_FR_TRIM     1.00f  // Front-Right trim
-#define MOTOR_RL_TRIM     1.03f  // Rear-Left trim
+#define MOTOR_RL_TRIM     1.00f  // Rear-Left trim
 #define MOTOR_RR_TRIM     1.00f  // Rear-Right trim
 
 /**

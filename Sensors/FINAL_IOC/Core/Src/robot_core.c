@@ -8,12 +8,12 @@
 #include <stdio.h>
 
 /* ---- DMA frame sizes = channel counts (single frame, no x2) ---- */
-#define ADC1_SIZE 9 /* 8 front QTR + 1 sharp */
-#define ADC2_SIZE 6 /* 6 right QTR */
-#define ADC3_SIZE 8 /* 6 left QTR + 2 sharp */
+#define ADC1_SIZE 1 /* 1 sharp only (front QTR is now RC digital) */
+#define ADC2_SIZE 0 /* 0 channels (right QTR is now RC digital) */
+#define ADC3_SIZE 2 /* 2 sharp only (left QTR is now RC digital) */
 
 static volatile uint16_t adc1_dma_buffer[ADC1_SIZE] = {0};
-static volatile uint16_t adc2_dma_buffer[ADC2_SIZE] = {0};
+static volatile uint16_t adc2_dma_buffer[ADC2_SIZE];
 static volatile uint16_t adc3_dma_buffer[ADC3_SIZE] = {0};
 
 static uint32_t last_loop_time = 0;
@@ -32,9 +32,10 @@ extern TIM_HandleTypeDef htim6;
 static Mecanum_Chassis_t chassis;
 #endif
 
+static PID_t line_pid;
+
 #if ENABLE_QTR_FRONT
 static QTR_Array_t qtr_front;
-static PID_t line_pid;
 static volatile uint16_t front_qtr_filtered[8] = {0};
 #endif
 
@@ -137,16 +138,61 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
 
 /* ============================================================
+   ADC POLLING FALLBACK (Strips DMA completely)
+   ============================================================ */
+static void Sensors_Poll(void)
+{
+#if ENABLE_SHARP_FRONT
+    HAL_ADC_Start(&hadc1);
+    for (int i = 0; i < ADC1_SIZE; i++) {
+        if (HAL_ADC_PollForConversion(&hadc1, 2) == HAL_OK) {
+            adc1_dma_buffer[i] = HAL_ADC_GetValue(&hadc1);
+        }
+    }
+    HAL_ADC_Stop(&hadc1);
+#endif
+
+#if ENABLE_QTR_RIGHT
+    HAL_ADC_Start(&hadc2);
+    for (int i = 0; i < ADC2_SIZE; i++) {
+        if (HAL_ADC_PollForConversion(&hadc2, 2) == HAL_OK) {
+            adc2_dma_buffer[i] = HAL_ADC_GetValue(&hadc2);
+        }
+    }
+    HAL_ADC_Stop(&hadc2);
+#endif
+
+#if ENABLE_SHARP_SIDE
+    HAL_ADC_Start(&hadc3);
+    for (int i = 0; i < ADC3_SIZE; i++) {
+        if (HAL_ADC_PollForConversion(&hadc3, 2) == HAL_OK) {
+            adc3_dma_buffer[i] = HAL_ADC_GetValue(&hadc3);
+        }
+    }
+    HAL_ADC_Stop(&hadc3);
+#endif
+}
+
+/* ============================================================
 INIT
 Correct order:
-1) hardware ADC self-calibration (BEFORE any DMA)
-2) start DMA
-3) QTR_Init with NULL handles (no internal polling)
-4) software sweep reading DMA buffers only
-5) start TIM6
+1) hardware ADC self-calibration (BEFORE any conversion)
+2) QTR_Init with NULL handles (no internal polling)
+3) software sweep reading ADC polling only
+4) start TIM6
 ============================================================ */
 void Robot_Init(void)
 {
+    /* Initialize PE8-PE15 as outputs for the LED bar/ring */
+    __HAL_RCC_GPIOE_CLK_ENABLE();
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+    GPIO_InitStruct.Pin = GPIO_PIN_8 | GPIO_PIN_9 | GPIO_PIN_10 | GPIO_PIN_11 | 
+                          GPIO_PIN_12 | GPIO_PIN_13 | GPIO_PIN_14 | GPIO_PIN_15;
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
+    GPIOE->ODR &= ~0xFF00; // turn them all off initially
     printf("\033[2J\033[H");
     printf("======================================\r\n");
     printf("   NERC ROBOT CORE BOOTING            \r\n");
@@ -173,53 +219,72 @@ void Robot_Init(void)
     Chassis_Init(&chassis);
 #endif
 
-    /* 1) hardware self-calibration BEFORE DMA. Never on a running ADC. */
-#if ENABLE_QTR_FRONT || ENABLE_SHARP_FRONT
+    /* Disable DMA requests to prevent Overrun errors since we are manual polling */
+#if ENABLE_SHARP_FRONT
+    hadc1.Init.DMAContinuousRequests = DISABLE;
+    HAL_ADC_Init(&hadc1);
+#endif
+#if ENABLE_SHARP_SIDE
+    hadc3.Init.DMAContinuousRequests = DISABLE;
+    HAL_ADC_Init(&hadc3);
+#endif
+
+    /* 1) hardware self-calibration BEFORE ADC start */
+#if ENABLE_SHARP_FRONT
     HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
 #endif
-#if ENABLE_QTR_RIGHT
-    HAL_ADCEx_Calibration_Start(&hadc2, ADC_SINGLE_ENDED);
-#endif
-#if ENABLE_QTR_LEFT || ENABLE_SHARP_LEFT || ENABLE_SHARP_RIGHT
+#if ENABLE_SHARP_SIDE
     HAL_ADCEx_Calibration_Start(&hadc3, ADC_SINGLE_ENDED);
 #endif
 
-    /* 2) start DMA (single frame, size == channel count) */
-#if ENABLE_QTR_FRONT || ENABLE_SHARP_FRONT
-    HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc1_dma_buffer, ADC1_SIZE);
-#endif
-#if ENABLE_QTR_RIGHT
-    HAL_ADC_Start_DMA(&hadc2, (uint32_t*)adc2_dma_buffer, ADC2_SIZE);
-#endif
-#if ENABLE_QTR_LEFT || ENABLE_SHARP_LEFT || ENABLE_SHARP_RIGHT
-    HAL_ADC_Start_DMA(&hadc3, (uint32_t*)adc3_dma_buffer, ADC3_SIZE);
-#endif
+    /* Initial manual poll to fill buffers */
+    Sensors_Poll();
 
-    HAL_Delay(5); /* let the first frames land */
-
-    /* 3) QTR_Init with NULL handles: skips all internal polling */
+    /* 3) QTR_Init for QTR-8RC digital array */
 #if ENABLE_QTR_FRONT
-    QTR_Init(&qtr_front, NULL, NULL, 8, 500);
-    PID_Init(&line_pid, 0.25f, 0.0f, 0.15f, 500.0f, 1200.0f);
-#if ENABLE_CHASSIS
-    /* 4) sweep reads adc1_dma_buffer only, no polling */
-    QTR_CalibrateSensorSweep(&qtr_front, (uint16_t*)adc1_dma_buffer, 5000, &chassis);
-#endif
+    GPIO_TypeDef *front_ports[8] = {GPIOA, GPIOA, GPIOA, GPIOC, GPIOC, GPIOC, GPIOC, GPIOF};
+    uint16_t front_pins[8] = {GPIO_PIN_1, GPIO_PIN_2, GPIO_PIN_3, GPIO_PIN_0, GPIO_PIN_1, GPIO_PIN_2, GPIO_PIN_3, GPIO_PIN_4};
+    QTR_Init(&qtr_front, front_ports, front_pins, 8, 2500); // 2500 us timeout for RC
+    PID_Init(&line_pid, 1.60f, 0.0f, 0.00f, 500.0f, 1200.0f);
 #endif
 
 #if ENABLE_QTR_RIGHT
-    QTR_Init(&qtr_right, NULL, NULL, 6, 500);
-#if ENABLE_CHASSIS
-    QTR_CalibrateSensorSweep(&qtr_right, (uint16_t*)adc2_dma_buffer, 5000, &chassis);
+    GPIO_TypeDef *right_ports[6] = {GPIOC, GPIOC, GPIOC, GPIOB, GPIOB, GPIOB};
+    uint16_t right_pins[6] = {GPIO_PIN_0, GPIO_PIN_1, GPIO_PIN_5, GPIO_PIN_0, GPIO_PIN_1, GPIO_PIN_2};
+    QTR_Init(&qtr_right, right_ports, right_pins, 6, 2500);
 #endif
+#if ENABLE_QTR_LEFT
+    GPIO_TypeDef *left_ports[6] = {GPIOE, GPIOE, GPIOB, GPIOB, GPIOB, GPIOB};
+    uint16_t left_pins[6] = {GPIO_PIN_6, GPIO_PIN_7, GPIO_PIN_10, GPIO_PIN_11, GPIO_PIN_12, GPIO_PIN_13};
+    QTR_Init(&qtr_left, left_ports, left_pins, 6, 2500);
 #endif
 
+    // Perform static global calibration for any initialized arrays
+    QTR_CalibrateAllThree(
+#if ENABLE_QTR_FRONT
+        &qtr_front, adc1_dma_buffer,
+#else
+        NULL, NULL,
+#endif
 #if ENABLE_QTR_LEFT
-    QTR_Init(&qtr_left, NULL, NULL, 6, 500);
+        &qtr_left, adc3_dma_buffer,
+#else
+        NULL, NULL,
+#endif
+#if ENABLE_QTR_RIGHT
+        &qtr_right, adc2_dma_buffer,
+#else
+        NULL, NULL,
+#endif
+        5000, 
 #if ENABLE_CHASSIS
-    QTR_CalibrateSensorSweep(&qtr_left, (uint16_t*)adc3_dma_buffer, 5000, &chassis);
+        &chassis,
+#else
+        NULL,
 #endif
-#endif
+        Sensors_Poll
+    );
+
 
 #if ENABLE_COLOR_SENSOR
     if (TCS34725_Init(&hi2c1) == HAL_OK) printf("color sensor ready\r\n");
@@ -248,18 +313,21 @@ void Robot_RunLoop(void)
     const float dt = 0.005f; /* fixed 200 Hz step */
 
     int32_t omega = 0;
-    int32_t base_speed = 800;
+    int32_t base_speed = 2700;
     uint8_t force_brake = 0;
 
+    /* Manually poll all ADCs for this frame */
+    Sensors_Poll();
+
 #if ENABLE_QTR_FRONT
-    /* read raw DMA frame, calibrate, filter, all at 200 Hz */
+    /* read digital RC time, filter, all at 200 Hz */
     uint16_t cal[8];
-    QTR_ReadCalibrated(&qtr_front, cal, (uint16_t*)&adc1_dma_buffer[0]);
+    QTR_ReadCalibrated(&qtr_front, cal, NULL);
     for (int i = 0; i < 8; i++)
         front_qtr_filtered[i] =
             (uint16_t)((EMA_ALPHA * cal[i]) + ((1.0f - EMA_ALPHA) * front_qtr_filtered[i]));
 #if ENABLE_SHARP_FRONT
-    sharp_cm_front = Sharp_Filter(sharp_cm_front, adc1_dma_buffer[8]);
+    sharp_cm_front = Sharp_Filter(sharp_cm_front, adc1_dma_buffer[0]);
 #endif
 
     float position = QTR_GetLinePosition(&qtr_front, (uint16_t*)front_qtr_filtered);
@@ -270,33 +338,64 @@ void Robot_RunLoop(void)
         PID_Reset(&line_pid);
 
     uint8_t all_white = 1;
-    for (int i = 0; i < 8; i++)
-        if (front_qtr_filtered[i] >= 300) { all_white = 0; break; }
+    uint16_t led_mask = 0;
+    for (int i = 0; i < 8; i++) {
+        if (front_qtr_filtered[i] >= 300) { 
+            all_white = 0; 
+            led_mask |= (1 << (8 + i)); // Light up PE8 + i
+        }
+    }
     if (all_white) force_brake = 1;
+    
+    // Output to LED pins PE8 to PE15
+    GPIOE->ODR = (GPIOE->ODR & ~0xFF00) | led_mask;
 #endif
 
 #if ENABLE_QTR_RIGHT
     {
-        uint16_t calr[6];
-        QTR_ReadCalibrated(&qtr_right, calr, (uint16_t*)&adc2_dma_buffer[0]);
-        for (int i = 0; i < 6; i++)
-            right_qtr_filtered[i] =
-                (uint16_t)((EMA_ALPHA * calr[i]) + ((1.0f - EMA_ALPHA) * right_qtr_filtered[i]));
+    uint16_t right_cal[6];
+    QTR_ReadCalibrated(&qtr_right, right_cal, NULL);
+    for (int i = 0; i < 6; i++)
+        right_qtr_filtered[i] =
+            (uint16_t)((EMA_ALPHA * right_cal[i]) + ((1.0f - EMA_ALPHA) * right_qtr_filtered[i]));
+        
+        // 6 sensors, max is 5000, center is 2500
+        float position = QTR_GetLinePosition(&qtr_right, (uint16_t*)right_qtr_filtered);
+        float error = 2500.0f - position; 
+        
+        if (error < -LINE_DEADBAND || error > LINE_DEADBAND)
+            omega = (int32_t)PID_Update(&line_pid, error, dt);
+        else
+            PID_Reset(&line_pid);
+            
+        uint8_t all_white = 1;
+        uint16_t led_mask = 0;
+        
+        // PURE HARDWARE DEBUG: Map the RAW analog voltage directly to the LEDs!
+        // A value of 1000 means ~0.8V. If it's over black, it should be > 2000 (1.6V+).
+        for (int i = 0; i < 6; i++) {
+            if (right_qtr_filtered[i] >= 300) {
+                all_white = 0;
+            }
+        }
+        
+        if (all_white) force_brake = 1;
+        
+        // Output to LED pins PE8 to PE13
+        GPIOE->ODR = (GPIOE->ODR & ~0x3F00) | led_mask;
     }
 #endif
 
 #if ENABLE_QTR_LEFT
     {
-        uint16_t call[6];
-        QTR_ReadCalibrated(&qtr_left, call, (uint16_t*)&adc3_dma_buffer[0]);
+        uint16_t left_cal[6];
+        QTR_ReadCalibrated(&qtr_left, left_cal, NULL);
         for (int i = 0; i < 6; i++)
             left_qtr_filtered[i] =
-                (uint16_t)((EMA_ALPHA * call[i]) + ((1.0f - EMA_ALPHA) * left_qtr_filtered[i]));
-#if ENABLE_SHARP_LEFT
-        sharp_cm_left = Sharp_Filter(sharp_cm_left, adc3_dma_buffer[6]);
-#endif
-#if ENABLE_SHARP_RIGHT
-        sharp_cm_right = Sharp_Filter(sharp_cm_right, adc3_dma_buffer[7]);
+                (uint16_t)((EMA_ALPHA * left_cal[i]) + ((1.0f - EMA_ALPHA) * left_qtr_filtered[i]));
+#if ENABLE_SHARP_SIDE
+    sharp_cm_right = Sharp_Filter(sharp_cm_right, adc3_dma_buffer[0]);
+    sharp_cm_left  = Sharp_Filter(sharp_cm_left,  adc3_dma_buffer[1]);
 #endif
     }
 #endif
@@ -304,7 +403,11 @@ void Robot_RunLoop(void)
 #if ENABLE_CHASSIS
 #if ENABLE_QTR_FRONT
     if (force_brake) Chassis_Drive(&chassis, 0, 0, 0);
-    else Chassis_Drive(&chassis, base_speed, 0, omega);
+    // MOTORS WIRED BACKWARDS FIX: Negate base_speed and omega
+    else Chassis_Drive(&chassis, -base_speed, 0, -omega);
+#elif ENABLE_QTR_RIGHT
+    if (force_brake) Chassis_Drive(&chassis, 0, 0, 0);
+    else Chassis_Drive(&chassis, 0, -base_speed, omega); // Strafe LEFT (-Vy), correct with omega!
 #else
     Chassis_Drive(&chassis, 0, 0, 0);
 #endif
@@ -321,10 +424,16 @@ void Robot_RunLoop(void)
         printf("==============================\r\n");
 #if ENABLE_QTR_FRONT
         printf("POS   %6.1f   OMEGA %6ld\r\n", (double)position, (long)omega);
-        printf("LINE [");
+        printf("RAW   [");
+        for (int i = 0; i < 8; i++) printf("%4d ", adc1_dma_buffer[i]);
+        printf("]\r\n");
+        printf("CALIB [");
+        for (int i = 0; i < 8; i++) printf("%4d ", front_qtr_filtered[i]);
+        printf("]\r\n");
+        printf("LINE  [");
         for (int i = 0; i < 8; i++)
-            printf(front_qtr_filtered[i] >= 500 ? "#" :
-                  (front_qtr_filtered[i] >= 200 ? "-" : " "));
+            printf(front_qtr_filtered[i] >= 500 ? "#### " :
+                  (front_qtr_filtered[i] >= 200 ? "---- " : "     "));
         printf("]\r\n");
 #endif
 #if ENABLE_SHARP_FRONT
@@ -340,12 +449,15 @@ void Robot_RunLoop(void)
    TURN ROUTINES
    ============================================================ */
 
+#if ENABLE_CHASSIS
+
 #define TURN_SPEED_FAST 800
 #define TURN_SPEED_SLOW 400
 #define LINE_ON 500 /* calibrated value: clearly on the line */
 #define LINE_OFF 200 /* calibrated value: clearly off the line */
 #define TURN_TIMEOUT_MS 3000
 
+#if ENABLE_QTR_FRONT
 /* strongest of the two center sensors, from a fresh raw frame */
 static uint16_t Front_CenterStrength(void)
 {
@@ -373,7 +485,9 @@ void Turn90_LineSnap(int8_t dir)
 
     Chassis_Drive(&chassis, 0, 0, 0); /* coast, no hard brake */
 }
+#endif // ENABLE_QTR_FRONT
 
+#if ENABLE_ENCODERS
 /* rough tick rotate for 45s and any turn with no line to snap to.
    ticks is the |front-left encoder| change for the angle, tuned once. */
 void Turn_ByTicks(int8_t dir, int32_t ticks)
@@ -388,3 +502,6 @@ void Turn_ByTicks(int8_t dir, int32_t ticks)
     }
     Chassis_Drive(&chassis, 0, 0, 0);
 }
+#endif // ENABLE_ENCODERS
+
+#endif /* ENABLE_CHASSIS */

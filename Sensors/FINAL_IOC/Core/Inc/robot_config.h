@@ -10,7 +10,7 @@
    forward line follower first.
    ============================================================ */
 #define ENABLE_CHASSIS       1
-#define ENABLE_ENCODERS      1
+#define ENABLE_ENCODERS      0
 
 #define ENABLE_QTR_FRONT     1
 #define ENABLE_QTR_RIGHT     0
@@ -70,6 +70,6 @@
 /* Control / filter tuning */
 #define EMA_ALPHA            0.25f
 #define LINE_CENTER          3500.0f /* 8-sensor center target */
-#define LINE_DEADBAND        30.0f
+#define LINE_DEADBAND        50.0f
 
 #endif /* ROBOT_CONFIG_H */
