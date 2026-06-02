@@ -7,14 +7,11 @@
 #include "encoders.h"
 #include <stdio.h>
 
-/* ---- DMA frame sizes = channel counts (single frame, no x2) ---- */
-#define ADC1_SIZE 1 /* 1 sharp only (front QTR is now RC digital) */
-#define ADC2_SIZE 0 /* 0 channels (right QTR is now RC digital) */
-#define ADC3_SIZE 2 /* 2 sharp only (left QTR is now RC digital) */
-
-static volatile uint16_t adc1_dma_buffer[ADC1_SIZE] = {0};
-static volatile uint16_t adc2_dma_buffer[ADC2_SIZE];
-static volatile uint16_t adc3_dma_buffer[ADC3_SIZE] = {0};
+/* Distance Sensors */
+#include "VL53L0X.h"
+volatile uint16_t vl53_front_mm = 8190;
+volatile uint16_t vl53_left_mm  = 8190;
+volatile uint16_t vl53_right_mm = 8190;
 
 static uint32_t last_loop_time = 0;
 static uint32_t last_telemetry_time = 0;
@@ -49,26 +46,7 @@ static QTR_Array_t qtr_left;
 static volatile uint16_t left_qtr_filtered[6] = {0};
 #endif
 
-#if ENABLE_SHARP_FRONT || ENABLE_SHARP_LEFT || ENABLE_SHARP_RIGHT
-static volatile float sharp_cm_front = 150.0f;
-static volatile float sharp_cm_left  = 150.0f;
-static volatile float sharp_cm_right = 150.0f;
-
-static float Calculate_Sharp_CM(uint16_t raw_adc)
-{
-    float voltage = (float)raw_adc * 3.3f / 4095.0f;
-    if (voltage < 0.35f) return 150.0f; /* far/no echo */
-    if (voltage > 2.6f) return 15.0f; /* clamp at blind floor */
-    return 62.28f / (voltage - 0.02f);
-}
-
-/* light EMA so the distance does not jitter the control loop */
-static float Sharp_Filter(float prev, uint16_t raw)
-{
-    float cm = Calculate_Sharp_CM(raw);
-    return (EMA_ALPHA * cm) + ((1.0f - EMA_ALPHA) * prev);
-}
-#endif
+// Sharp sensors removed
 
 #if ENABLE_COLOR_SENSOR
 static TCS34725_RawData color_raw;
@@ -142,35 +120,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
    ============================================================ */
 static void Sensors_Poll(void)
 {
-#if ENABLE_SHARP_FRONT
-    HAL_ADC_Start(&hadc1);
-    for (int i = 0; i < ADC1_SIZE; i++) {
-        if (HAL_ADC_PollForConversion(&hadc1, 2) == HAL_OK) {
-            adc1_dma_buffer[i] = HAL_ADC_GetValue(&hadc1);
-        }
-    }
-    HAL_ADC_Stop(&hadc1);
-#endif
-
-#if ENABLE_QTR_RIGHT
-    HAL_ADC_Start(&hadc2);
-    for (int i = 0; i < ADC2_SIZE; i++) {
-        if (HAL_ADC_PollForConversion(&hadc2, 2) == HAL_OK) {
-            adc2_dma_buffer[i] = HAL_ADC_GetValue(&hadc2);
-        }
-    }
-    HAL_ADC_Stop(&hadc2);
-#endif
-
-#if ENABLE_SHARP_SIDE
-    HAL_ADC_Start(&hadc3);
-    for (int i = 0; i < ADC3_SIZE; i++) {
-        if (HAL_ADC_PollForConversion(&hadc3, 2) == HAL_OK) {
-            adc3_dma_buffer[i] = HAL_ADC_GetValue(&hadc3);
-        }
-    }
-    HAL_ADC_Stop(&hadc3);
-#endif
+    // ADC polling removed
 }
 
 /* ============================================================
@@ -219,31 +169,44 @@ void Robot_Init(void)
     Chassis_Init(&chassis);
 #endif
 
-    /* Disable DMA requests to prevent Overrun errors since we are manual polling */
-#if ENABLE_SHARP_FRONT
-    hadc1.Init.DMAContinuousRequests = DISABLE;
-    HAL_ADC_Init(&hadc1);
-#endif
-#if ENABLE_SHARP_SIDE
-    hadc3.Init.DMAContinuousRequests = DISABLE;
-    HAL_ADC_Init(&hadc3);
-#endif
-
-    /* 1) hardware self-calibration BEFORE ADC start */
-#if ENABLE_SHARP_FRONT
-    HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
-#endif
-#if ENABLE_SHARP_SIDE
-    HAL_ADCEx_Calibration_Start(&hadc3, ADC_SINGLE_ENDED);
+    /* --- VL53L0X Sequential Initialization --- */
+    // 1. Pull all XSHUT low to reset
+    HAL_GPIO_WritePin(GPIOF, GPIO_PIN_2, GPIO_PIN_RESET); // FRONT
+    HAL_GPIO_WritePin(GPIOD, GPIO_PIN_11, GPIO_PIN_RESET); // LEFT
+    HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, GPIO_PIN_RESET); // RIGHT
+    HAL_Delay(10);
+    
+#if ENABLE_VL53L0X_FRONT
+    HAL_GPIO_WritePin(GPIOF, GPIO_PIN_2, GPIO_PIN_SET); // Boot FRONT
+    HAL_Delay(10);
+    VL53L0X_SelectSensor(0);
+    setAddress(0x54);
+    if (!initVL53L0X(1)) printf("VL53L0X FRONT Init Failed!\r\n");
+    else { startContinuous(0); printf("VL53L0X FRONT Ready.\r\n"); }
 #endif
 
-    /* Initial manual poll to fill buffers */
-    Sensors_Poll();
+#if ENABLE_VL53L0X_LEFT
+    HAL_GPIO_WritePin(GPIOD, GPIO_PIN_11, GPIO_PIN_SET); // Boot LEFT
+    HAL_Delay(10);
+    VL53L0X_SelectSensor(1);
+    setAddress(0x56);
+    if (!initVL53L0X(1)) printf("VL53L0X LEFT Init Failed!\r\n");
+    else { startContinuous(0); printf("VL53L0X LEFT Ready.\r\n"); }
+#endif
+
+#if ENABLE_VL53L0X_RIGHT
+    HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, GPIO_PIN_SET); // Boot RIGHT
+    HAL_Delay(10);
+    VL53L0X_SelectSensor(2);
+    setAddress(0x58); // CHANGED: Avoids collision with TCS34725 (0x52)
+    if (!initVL53L0X(1)) printf("VL53L0X RIGHT Init Failed!\r\n");
+    else { startContinuous(0); printf("VL53L0X RIGHT Ready.\r\n"); }
+#endif
 
     /* 3) QTR_Init for QTR-8RC digital array */
 #if ENABLE_QTR_FRONT
-    GPIO_TypeDef *front_ports[8] = {GPIOA, GPIOA, GPIOA, GPIOC, GPIOC, GPIOC, GPIOC, GPIOF};
-    uint16_t front_pins[8] = {GPIO_PIN_1, GPIO_PIN_2, GPIO_PIN_3, GPIO_PIN_0, GPIO_PIN_1, GPIO_PIN_2, GPIO_PIN_3, GPIO_PIN_4};
+    GPIO_TypeDef *front_ports[8] = {GPIOA, GPIOA, GPIOA, GPIOF, GPIOA, GPIOA, GPIOA, GPIOA};
+    uint16_t front_pins[8] = {GPIO_PIN_1, GPIO_PIN_2, GPIO_PIN_3, GPIO_PIN_4, GPIO_PIN_4, GPIO_PIN_5, GPIO_PIN_6, GPIO_PIN_7};
     QTR_Init(&qtr_front, front_ports, front_pins, 8, 2500); // 2500 us timeout for RC
     PID_Init(&line_pid, 1.60f, 0.0f, 0.00f, 500.0f, 1200.0f);
 #endif
@@ -262,17 +225,17 @@ void Robot_Init(void)
     // Perform static global calibration for any initialized arrays
     QTR_CalibrateAllThree(
 #if ENABLE_QTR_FRONT
-        &qtr_front, adc1_dma_buffer,
+        &qtr_front, NULL,
 #else
         NULL, NULL,
 #endif
 #if ENABLE_QTR_LEFT
-        &qtr_left, adc3_dma_buffer,
+        &qtr_left, NULL,
 #else
         NULL, NULL,
 #endif
 #if ENABLE_QTR_RIGHT
-        &qtr_right, adc2_dma_buffer,
+        &qtr_right, NULL,
 #else
         NULL, NULL,
 #endif
@@ -319,6 +282,20 @@ void Robot_RunLoop(void)
     /* Manually poll all ADCs for this frame */
     Sensors_Poll();
 
+    /* --- VL53L0X Polling --- */
+#if ENABLE_VL53L0X_FRONT
+    VL53L0X_SelectSensor(0);
+    vl53_front_mm = readRangeContinuousMillimeters(NULL);
+#endif
+#if ENABLE_VL53L0X_LEFT
+    VL53L0X_SelectSensor(1);
+    vl53_left_mm = readRangeContinuousMillimeters(NULL);
+#endif
+#if ENABLE_VL53L0X_RIGHT
+    VL53L0X_SelectSensor(2);
+    vl53_right_mm = readRangeContinuousMillimeters(NULL);
+#endif
+
 #if ENABLE_QTR_FRONT
     /* read digital RC time, filter, all at 200 Hz */
     uint16_t cal[8];
@@ -326,9 +303,7 @@ void Robot_RunLoop(void)
     for (int i = 0; i < 8; i++)
         front_qtr_filtered[i] =
             (uint16_t)((EMA_ALPHA * cal[i]) + ((1.0f - EMA_ALPHA) * front_qtr_filtered[i]));
-#if ENABLE_SHARP_FRONT
-    sharp_cm_front = Sharp_Filter(sharp_cm_front, adc1_dma_buffer[0]);
-#endif
+// Sharp FRONT removed
 
     float position = QTR_GetLinePosition(&qtr_front, (uint16_t*)front_qtr_filtered);
     float error = LINE_CENTER - position;
@@ -393,10 +368,7 @@ void Robot_RunLoop(void)
         for (int i = 0; i < 6; i++)
             left_qtr_filtered[i] =
                 (uint16_t)((EMA_ALPHA * left_cal[i]) + ((1.0f - EMA_ALPHA) * left_qtr_filtered[i]));
-#if ENABLE_SHARP_SIDE
-    sharp_cm_right = Sharp_Filter(sharp_cm_right, adc3_dma_buffer[0]);
-    sharp_cm_left  = Sharp_Filter(sharp_cm_left,  adc3_dma_buffer[1]);
-#endif
+// Sharp SIDE removed
     }
 #endif
 
@@ -424,9 +396,6 @@ void Robot_RunLoop(void)
         printf("==============================\r\n");
 #if ENABLE_QTR_FRONT
         printf("POS   %6.1f   OMEGA %6ld\r\n", (double)position, (long)omega);
-        printf("RAW   [");
-        for (int i = 0; i < 8; i++) printf("%4d ", adc1_dma_buffer[i]);
-        printf("]\r\n");
         printf("CALIB [");
         for (int i = 0; i < 8; i++) printf("%4d ", front_qtr_filtered[i]);
         printf("]\r\n");
@@ -436,9 +405,19 @@ void Robot_RunLoop(void)
                   (front_qtr_filtered[i] >= 200 ? "---- " : "     "));
         printf("]\r\n");
 #endif
-#if ENABLE_SHARP_FRONT
-        printf("FRONT : %6.1f cm\r\n", (double)sharp_cm_front);
+
+        // Print distance sensors
+        printf("Dist (mm) | ");
+#if ENABLE_VL53L0X_FRONT
+        printf("F: %4d ", vl53_front_mm);
 #endif
+#if ENABLE_VL53L0X_LEFT
+        printf("L: %4d ", vl53_left_mm);
+#endif
+#if ENABLE_VL53L0X_RIGHT
+        printf("R: %4d ", vl53_right_mm);
+#endif
+        printf("\r\n");
         printf("==============================\r\n");
         last_tele = now;
     }
@@ -462,7 +441,7 @@ void Robot_RunLoop(void)
 static uint16_t Front_CenterStrength(void)
 {
     uint16_t cal[8];
-    QTR_ReadCalibrated(&qtr_front, cal, (uint16_t*)&adc1_dma_buffer[0]);
+    QTR_ReadCalibrated(&qtr_front, cal, NULL);
     return (cal[3] > cal[4]) ? cal[3] : cal[4];
 }
 
