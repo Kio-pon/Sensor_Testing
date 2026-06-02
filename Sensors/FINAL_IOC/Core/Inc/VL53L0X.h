@@ -17,10 +17,10 @@
 #define ADDRESS_DEFAULT 0b01010010
 
 // Record the current time to check an upcoming timeout against
-#define startTimeout() (g_timeoutStartMs = millis())
+#define startTimeout() (g_timeoutStartMs = HAL_GetTick())
 
 // Check if timeout is enabled (set to nonzero value) and has expired
-#define checkTimeoutExpired() (g_ioTimeout > 0 && ((uint16_t)millis() - g_timeoutStartMs) > g_ioTimeout)
+#define checkTimeoutExpired() (g_ioTimeout > 0 && ((uint16_t)(HAL_GetTick() - g_timeoutStartMs) > g_ioTimeout))
 
 // Decode VCSEL (vertical cavity surface emitting laser) pulse period in PCLKs
 // from register value

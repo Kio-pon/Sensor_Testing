@@ -77,6 +77,8 @@ void Error_Handler(void);
 #define RIGHT_QTR_2_GPIO_Port GPIOC
 #define XSHUT_FRONT_Pin GPIO_PIN_2
 #define XSHUT_FRONT_GPIO_Port GPIOF
+#define LEFT_QTR_1_Pin GPIO_PIN_0
+#define LEFT_QTR_1_GPIO_Port GPIOA
 #define FRONT_QTR_1_Pin GPIO_PIN_1
 #define FRONT_QTR_1_GPIO_Port GPIOA
 #define FRONT_QTR_2_Pin GPIO_PIN_2
@@ -89,8 +91,6 @@ void Error_Handler(void);
 #define FRONT_QTR_5_GPIO_Port GPIOA
 #define FRONT_QTR_6_Pin GPIO_PIN_5
 #define FRONT_QTR_6_GPIO_Port GPIOA
-#define FRONT_QTR_7_Pin GPIO_PIN_6
-#define FRONT_QTR_7_GPIO_Port GPIOA
 #define FRONT_QTR_8_Pin GPIO_PIN_7
 #define FRONT_QTR_8_GPIO_Port GPIOA
 #define RIGHT_QTR_3_Pin GPIO_PIN_5
@@ -105,8 +105,6 @@ void Error_Handler(void);
 #define LD7_GPIO_Port GPIOE
 #define LD9_Pin GPIO_PIN_12
 #define LD9_GPIO_Port GPIOE
-#define LEFT_QTR_6_Pin GPIO_PIN_13
-#define LEFT_QTR_6_GPIO_Port GPIOB
 #define RL_DIR_2_Pin GPIO_PIN_14
 #define RL_DIR_2_GPIO_Port GPIOB
 #define RL_DIR_1_Pin GPIO_PIN_15

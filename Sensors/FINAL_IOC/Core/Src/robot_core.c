@@ -115,12 +115,61 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 }
 
 
-/* ============================================================
-   ADC POLLING FALLBACK (Strips DMA completely)
-   ============================================================ */
+
+volatile uint16_t adc_front_buffer[8];
+volatile uint16_t adc_right_buffer[6];
+volatile uint16_t adc_left_buffer[6];
+
+ADC_HandleTypeDef hadc4;
+
+static uint16_t Read_ADC_Channel(ADC_HandleTypeDef *hadc, uint32_t channel) {
+    ADC_ChannelConfTypeDef sConfig = {0};
+    sConfig.Channel = channel;
+    sConfig.Rank = ADC_REGULAR_RANK_1;
+    sConfig.SingleDiff = ADC_SINGLE_ENDED;
+    sConfig.SamplingTime = ADC_SAMPLETIME_19CYCLES_5; 
+    sConfig.OffsetNumber = ADC_OFFSET_NONE;
+    sConfig.Offset = 0;
+    
+    if (HAL_ADC_ConfigChannel(hadc, &sConfig) != HAL_OK) return 4095;
+    
+    HAL_ADC_Start(hadc);
+    if (HAL_ADC_PollForConversion(hadc, 2) == HAL_OK) {
+        return HAL_ADC_GetValue(hadc);
+    }
+    return 4095;
+}
+
 static void Sensors_Poll(void)
 {
-    // ADC polling removed
+#if ENABLE_QTR_FRONT
+    adc_front_buffer[0] = Read_ADC_Channel(&hadc1, ADC_CHANNEL_2); // PA1
+    adc_front_buffer[1] = Read_ADC_Channel(&hadc1, ADC_CHANNEL_3); // PA2
+    adc_front_buffer[2] = Read_ADC_Channel(&hadc1, ADC_CHANNEL_4); // PA3
+    adc_front_buffer[3] = Read_ADC_Channel(&hadc1, ADC_CHANNEL_5); // PF4
+    adc_front_buffer[4] = Read_ADC_Channel(&hadc2, ADC_CHANNEL_1); // PA4
+    adc_front_buffer[5] = Read_ADC_Channel(&hadc2, ADC_CHANNEL_2); // PA5
+    adc_front_buffer[6] = Read_ADC_Channel(&hadc2, ADC_CHANNEL_3); // PA6
+    adc_front_buffer[7] = Read_ADC_Channel(&hadc2, ADC_CHANNEL_4); // PA7
+#endif
+
+#if ENABLE_QTR_RIGHT
+    adc_right_buffer[0] = Read_ADC_Channel(&hadc1, ADC_CHANNEL_6); // PC0
+    adc_right_buffer[1] = Read_ADC_Channel(&hadc1, ADC_CHANNEL_7); // PC1
+    adc_right_buffer[2] = Read_ADC_Channel(&hadc2, ADC_CHANNEL_11); // PC5
+    adc_right_buffer[3] = Read_ADC_Channel(&hadc3, ADC_CHANNEL_12); // PB0
+    adc_right_buffer[4] = Read_ADC_Channel(&hadc3, ADC_CHANNEL_1); // PB1
+    adc_right_buffer[5] = Read_ADC_Channel(&hadc2, ADC_CHANNEL_12); // PB2
+#endif
+
+#if ENABLE_QTR_LEFT
+    adc_left_buffer[0] = Read_ADC_Channel(&hadc1, ADC_CHANNEL_1); // PA0
+    adc_left_buffer[1] = Read_ADC_Channel(&hadc3, ADC_CHANNEL_13); // PE7
+    adc_left_buffer[2] = Read_ADC_Channel(&hadc1, ADC_CHANNEL_8); // PC2
+    adc_left_buffer[3] = Read_ADC_Channel(&hadc1, ADC_CHANNEL_9); // PC3
+    adc_left_buffer[4] = Read_ADC_Channel(&hadc4, ADC_CHANNEL_3); // PB12
+    adc_left_buffer[5] = Read_ADC_Channel(&hadc4, ADC_CHANNEL_4); // PB13
+#endif
 }
 
 /* ============================================================
@@ -131,8 +180,39 @@ Correct order:
 3) software sweep reading ADC polling only
 4) start TIM6
 ============================================================ */
+
+/* ============================================================
+   ADC4 MANUAL INITIALIZATION (Fallback for CubeMX)
+   ============================================================ */
+static void ADC4_Manual_Init(void) {
+    __HAL_RCC_ADC34_CLK_ENABLE();
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+    GPIO_InitStruct.Pin = GPIO_PIN_12 | GPIO_PIN_13;
+    GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+    
+    hadc4.Instance = ADC4;
+    hadc4.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV1;
+    hadc4.Init.Resolution = ADC_RESOLUTION_12B;
+    hadc4.Init.ScanConvMode = ADC_SCAN_DISABLE;
+    hadc4.Init.ContinuousConvMode = DISABLE;
+    hadc4.Init.DiscontinuousConvMode = DISABLE;
+    hadc4.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+    hadc4.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+    hadc4.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+    hadc4.Init.NbrOfConversion = 1;
+    hadc4.Init.DMAContinuousRequests = DISABLE;
+    hadc4.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+    hadc4.Init.LowPowerAutoWait = DISABLE;
+    hadc4.Init.Overrun = ADC_OVR_DATA_OVERWRITTEN;
+    HAL_ADC_Init(&hadc4);
+}
+
 void Robot_Init(void)
 {
+    ADC4_Manual_Init();
     /* Initialize PE8-PE15 as outputs for the LED bar/ring */
     __HAL_RCC_GPIOE_CLK_ENABLE();
     GPIO_InitTypeDef GPIO_InitStruct = {0};
@@ -203,39 +283,34 @@ void Robot_Init(void)
     else { startContinuous(0); printf("VL53L0X RIGHT Ready.\r\n"); }
 #endif
 
-    /* 3) QTR_Init for QTR-8RC digital array */
+    /* 3) QTR_Init for QTR-8A analog arrays */
 #if ENABLE_QTR_FRONT
-    GPIO_TypeDef *front_ports[8] = {GPIOA, GPIOA, GPIOA, GPIOF, GPIOA, GPIOA, GPIOA, GPIOA};
-    uint16_t front_pins[8] = {GPIO_PIN_1, GPIO_PIN_2, GPIO_PIN_3, GPIO_PIN_4, GPIO_PIN_4, GPIO_PIN_5, GPIO_PIN_6, GPIO_PIN_7};
-    QTR_Init(&qtr_front, front_ports, front_pins, 8, 2500); // 2500 us timeout for RC
+    QTR_Init(&qtr_front, 8);
     PID_Init(&line_pid, 1.60f, 0.0f, 0.00f, 500.0f, 1200.0f);
 #endif
 
 #if ENABLE_QTR_RIGHT
-    GPIO_TypeDef *right_ports[6] = {GPIOC, GPIOC, GPIOC, GPIOB, GPIOB, GPIOB};
-    uint16_t right_pins[6] = {GPIO_PIN_0, GPIO_PIN_1, GPIO_PIN_5, GPIO_PIN_0, GPIO_PIN_1, GPIO_PIN_2};
-    QTR_Init(&qtr_right, right_ports, right_pins, 6, 2500);
+    QTR_Init(&qtr_right, 6);
 #endif
 #if ENABLE_QTR_LEFT
-    GPIO_TypeDef *left_ports[6] = {GPIOE, GPIOE, GPIOB, GPIOB, GPIOB, GPIOB};
-    uint16_t left_pins[6] = {GPIO_PIN_6, GPIO_PIN_7, GPIO_PIN_10, GPIO_PIN_11, GPIO_PIN_12, GPIO_PIN_13};
-    QTR_Init(&qtr_left, left_ports, left_pins, 6, 2500);
+    QTR_Init(&qtr_left, 6);
 #endif
 
     // Perform static global calibration for any initialized arrays
+    /* -- CALIBRATION DISABLED FOR MOTOR TESTING --
     QTR_CalibrateAllThree(
 #if ENABLE_QTR_FRONT
-        &qtr_front, NULL,
+        &qtr_front, adc_front_buffer,
 #else
         NULL, NULL,
 #endif
 #if ENABLE_QTR_LEFT
-        &qtr_left, NULL,
+        &qtr_left, adc_left_buffer,
 #else
         NULL, NULL,
 #endif
 #if ENABLE_QTR_RIGHT
-        &qtr_right, NULL,
+        &qtr_right, adc_right_buffer,
 #else
         NULL, NULL,
 #endif
@@ -247,6 +322,7 @@ void Robot_Init(void)
 #endif
         Sensors_Poll
     );
+    */
 
 
 #if ENABLE_COLOR_SENSOR
@@ -299,7 +375,7 @@ void Robot_RunLoop(void)
 #if ENABLE_QTR_FRONT
     /* read digital RC time, filter, all at 200 Hz */
     uint16_t cal[8];
-    QTR_ReadCalibrated(&qtr_front, cal, NULL);
+    QTR_ReadCalibrated(&qtr_front, cal, adc_front_buffer);
     for (int i = 0; i < 8; i++)
         front_qtr_filtered[i] =
             (uint16_t)((EMA_ALPHA * cal[i]) + ((1.0f - EMA_ALPHA) * front_qtr_filtered[i]));
@@ -322,14 +398,13 @@ void Robot_RunLoop(void)
     }
     if (all_white) force_brake = 1;
     
-    // Output to LED pins PE8 to PE15
-    GPIOE->ODR = (GPIOE->ODR & ~0xFF00) | led_mask;
+    // LED output moved to motor test
 #endif
 
 #if ENABLE_QTR_RIGHT
     {
     uint16_t right_cal[6];
-    QTR_ReadCalibrated(&qtr_right, right_cal, NULL);
+    QTR_ReadCalibrated(&qtr_right, right_cal, adc_right_buffer);
     for (int i = 0; i < 6; i++)
         right_qtr_filtered[i] =
             (uint16_t)((EMA_ALPHA * right_cal[i]) + ((1.0f - EMA_ALPHA) * right_qtr_filtered[i]));
@@ -356,15 +431,14 @@ void Robot_RunLoop(void)
         
         if (all_white) force_brake = 1;
         
-        // Output to LED pins PE8 to PE13
-        GPIOE->ODR = (GPIOE->ODR & ~0x3F00) | led_mask;
+        // LED output moved to motor test
     }
 #endif
 
 #if ENABLE_QTR_LEFT
     {
         uint16_t left_cal[6];
-        QTR_ReadCalibrated(&qtr_left, left_cal, NULL);
+        QTR_ReadCalibrated(&qtr_left, left_cal, adc_left_buffer);
         for (int i = 0; i < 6; i++)
             left_qtr_filtered[i] =
                 (uint16_t)((EMA_ALPHA * left_cal[i]) + ((1.0f - EMA_ALPHA) * left_qtr_filtered[i]));
@@ -373,16 +447,57 @@ void Robot_RunLoop(void)
 #endif
 
 #if ENABLE_CHASSIS
+    // --- MOTOR & LED SEQUENCE TEST ---
+    // Forward -> Backward -> Right -> Left -> Spin -> Loop
+    uint32_t t = HAL_GetTick() % 10000; // 10 second sequence
+    uint16_t led_test_mask = 0;
+    
+    // Telemetry Printing (State tracking to only print once per change)
+    static uint32_t last_test_state = 99;
+    uint32_t current_state = t / 2000;
+    
+    if (current_state != last_test_state) {
+        last_test_state = current_state;
+        printf("\r\n=======================\r\n");
+        if (current_state == 0) printf(">>> MOVING FORWARD <<<\r\n");
+        else if (current_state == 1) printf(">>> MOVING BACKWARD <<<\r\n");
+        else if (current_state == 2) printf(">>> STRAFING RIGHT <<<\r\n");
+        else if (current_state == 3) printf(">>> STRAFING LEFT <<<\r\n");
+        else if (current_state == 4) printf(">>> SPINNING IN PLACE <<<\r\n");
+        printf("=======================\r\n");
+    }
+    
+    if (t < 2000) {
+        Chassis_Drive(&chassis, 2000, 0, 0); // Forward
+        led_test_mask = (1 << 8) | (1 << 9); // PE8, PE9
+    } else if (t < 4000) {
+        Chassis_Drive(&chassis, -2000, 0, 0); // Backward
+        led_test_mask = (1 << 10) | (1 << 11); // PE10, PE11
+    } else if (t < 6000) {
+        Chassis_Drive(&chassis, 0, 2000, 0); // Strafe Right
+        led_test_mask = (1 << 12) | (1 << 13); // PE12, PE13
+    } else if (t < 8000) {
+        Chassis_Drive(&chassis, 0, -2000, 0); // Strafe Left
+        led_test_mask = (1 << 14) | (1 << 15); // PE14, PE15
+    } else {
+        Chassis_Drive(&chassis, 0, 0, 2000); // Spin in place
+        led_test_mask = 0xFF00; // ALL LEDs
+    }
+    
+    // Output directly to LED pins PE8 to PE15
+    GPIOE->ODR = (GPIOE->ODR & ~0xFF00) | led_test_mask;
+
+    /* PURE LINE FOLLOWING BACKUP (Uncomment this and delete the sequence test when ready)
 #if ENABLE_QTR_FRONT
     if (force_brake) Chassis_Drive(&chassis, 0, 0, 0);
-    // MOTORS WIRED BACKWARDS FIX: Negate base_speed and omega
     else Chassis_Drive(&chassis, -base_speed, 0, -omega);
 #elif ENABLE_QTR_RIGHT
     if (force_brake) Chassis_Drive(&chassis, 0, 0, 0);
-    else Chassis_Drive(&chassis, 0, -base_speed, omega); // Strafe LEFT (-Vy), correct with omega!
+    else Chassis_Drive(&chassis, 0, -base_speed, omega); 
 #else
     Chassis_Drive(&chassis, 0, 0, 0);
 #endif
+    */
 #endif
 
 #if ENABLE_TELEMETRY
@@ -441,7 +556,7 @@ void Robot_RunLoop(void)
 static uint16_t Front_CenterStrength(void)
 {
     uint16_t cal[8];
-    QTR_ReadCalibrated(&qtr_front, cal, NULL);
+    QTR_ReadCalibrated(&qtr_front, cal, adc_front_buffer);
     return (cal[3] > cal[4]) ? cal[3] : cal[4];
 }
 

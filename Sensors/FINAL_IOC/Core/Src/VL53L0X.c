@@ -5,7 +5,6 @@
 
 #include <stdint.h>
 #include "stm32f3xx_hal.h"
-#include "millis.h"
 #include "VL53L0X.h"
 
 extern I2C_HandleTypeDef hi2c1;
