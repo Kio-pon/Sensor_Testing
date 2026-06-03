@@ -111,15 +111,22 @@ void Chassis_Drive(Mecanum_Chassis_t *chassis, int32_t vx, int32_t vy, int32_t o
 {
     if (chassis == NULL) return;
     
-    // Invert vy and omega to match the physical wiring and assembly direction
-    vy = -vy;
-    omega = -omega;
+    // MATHEMATICAL WHEEL-SWAP FIX RESTORED:
+    // The physical mecanum wheels are wired/mounted such that standard strafing equations 
+    // cause rotation, and rotation equations cause strafing!
     
-    // Mecanum Kinematic formulas with motor speed trim factors
-    int32_t fl_speed = (int32_t)((vx + vy - omega) * MOTOR_FL_TRIM);
-    int32_t fr_speed = (int32_t)((vx - vy + omega) * MOTOR_FR_TRIM);
-    int32_t rl_speed = (int32_t)((vx - vy - omega) * MOTOR_RL_TRIM);
-    int32_t rr_speed = (int32_t)((vx + vy + omega) * MOTOR_RR_TRIM);
+    // omega input controls actual_vy (mathematical rotation)
+    int32_t actual_vy = -omega; 
+    
+    // vy input controls actual_omega (mathematical strafing).
+    // The user stated right/left strafing was reversed, so we invert vy here.
+    int32_t actual_omega = -vy; 
+    
+    // Mecanum Kinematic formulas
+    int32_t fl_speed = (int32_t)((vx + actual_vy - actual_omega) * MOTOR_FL_TRIM);
+    int32_t fr_speed = (int32_t)((vx - actual_vy + actual_omega) * MOTOR_FR_TRIM);
+    int32_t rl_speed = (int32_t)((vx - actual_vy - actual_omega) * MOTOR_RL_TRIM);
+    int32_t rr_speed = (int32_t)((vx + actual_vy + actual_omega) * MOTOR_RR_TRIM);
     
     Motor_SetSpeed(&chassis->fl, fl_speed);
     Motor_SetSpeed(&chassis->fr, fr_speed);

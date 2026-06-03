@@ -105,10 +105,6 @@ void Error_Handler(void);
 #define LD7_GPIO_Port GPIOE
 #define LD9_Pin GPIO_PIN_12
 #define LD9_GPIO_Port GPIOE
-#define RL_DIR_2_Pin GPIO_PIN_14
-#define RL_DIR_2_GPIO_Port GPIOB
-#define RL_DIR_1_Pin GPIO_PIN_15
-#define RL_DIR_1_GPIO_Port GPIOB
 #define FL_DIR_1_Pin GPIO_PIN_8
 #define FL_DIR_1_GPIO_Port GPIOD
 #define FL_DIR_2_Pin GPIO_PIN_9
@@ -159,6 +155,10 @@ void Error_Handler(void);
 #define RL_PWM_GPIO_Port GPIOD
 #define SWO_Pin GPIO_PIN_3
 #define SWO_GPIO_Port GPIOB
+#define RL_DIR_2_Pin GPIO_PIN_4
+#define RL_DIR_2_GPIO_Port GPIOB
+#define RL_DIR_1_Pin GPIO_PIN_5
+#define RL_DIR_1_GPIO_Port GPIOB
 #define I2C1_SCL_Pin GPIO_PIN_8
 #define I2C1_SCL_GPIO_Port GPIOB
 #define I2C1_SDA_Pin GPIO_PIN_9

@@ -10,15 +10,15 @@
    forward line follower first.
    ============================================================ */
 #define ENABLE_CHASSIS       1
-#define ENABLE_ENCODERS      0
+#define ENABLE_ENCODERS      1
 
 #define ENABLE_QTR_FRONT     1
-#define ENABLE_QTR_RIGHT     0
+#define ENABLE_QTR_RIGHT     1
 #define ENABLE_QTR_LEFT      0
 
-#define ENABLE_VL53L0X_FRONT 1
-#define ENABLE_VL53L0X_LEFT  0
-#define ENABLE_VL53L0X_RIGHT 0
+#define ENABLE_SHARP_FRONT   0
+#define ENABLE_SHARP_LEFT    0
+#define ENABLE_SHARP_RIGHT   0
 
 #define ENABLE_COLOR_SENSOR  0
 #define ENABLE_ARM_SERVO     0
@@ -70,6 +70,6 @@
 /* Control / filter tuning */
 #define EMA_ALPHA            0.25f
 #define LINE_CENTER          3500.0f /* 8-sensor center target */
-#define LINE_DEADBAND        50.0f
+#define LINE_DEADBAND        30.0f
 
 #endif /* ROBOT_CONFIG_H */

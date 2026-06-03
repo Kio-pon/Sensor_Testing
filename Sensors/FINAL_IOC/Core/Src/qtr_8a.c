@@ -26,16 +26,12 @@ void QTR_ReadCalibrated(QTR_Array_t *array, uint16_t *calibrated_values, volatil
     uint16_t sensor_values[MAX_QTR_SENSORS];
     QTR_ReadRaw(array, sensor_values, adc_buffer);
     for (uint8_t i = 0; i < array->num_sensors; i++) {
-        uint16_t calmin = array->calibrated_minimums[i];
-        uint16_t calmax = array->calibrated_maximums[i];
-        uint16_t denominator = calmax - calmin;
-        int16_t value = 0;
-        if (denominator != 0) {
-            value = (int32_t)(sensor_values[i] - calmin) * 1000 / denominator;
+        // User requested inverted logic: > 3950 is Black, <= 3950 is White
+        if (sensor_values[i] > 3950) {
+            calibrated_values[i] = 1000; // Black
+        } else {
+            calibrated_values[i] = 0;    // White
         }
-        if (value < 0) value = 0;
-        if (value > 1000) value = 1000;
-        calibrated_values[i] = value;
     }
 }
 
@@ -80,9 +76,17 @@ void QTR_CalibrateAllThree(
         for (uint8_t i = 0; i < right->num_sensors; i++) { right->calibrated_minimums[i] = 4095; right->calibrated_maximums[i] = 0; }
     }
     
-    if (c) Chassis_Drive(c, 0, -800, 0); // slow strafe
+
     
     while (HAL_GetTick() - t0 < duration_ms) {
+        uint32_t elapsed = HAL_GetTick() - t0;
+        if (c) {
+            // Sequence requested: Rotate CW for 2s, Rotate CCW for 3s, then stop.
+            if (elapsed < 2000) Chassis_Drive(c, 0, 0, -2000); // Rotate CW
+            else if (elapsed < 5000) Chassis_Drive(c, 0, 0, 2000); // Rotate CCW
+            else Chassis_Drive(c, 0, 0, 0); // Stop for the remaining 5s
+        }
+    
         if (poll_callback) poll_callback(); // Poll ADCs!
         
         if (front && front_adc) {
@@ -108,6 +112,8 @@ void QTR_CalibrateAllThree(
         }
         HAL_Delay(5);
     }
+    
+    if (c) Chassis_Drive(c, 0, 0, 0); // Stop after calibration
     
     if (c) Chassis_Drive(c, 0, 0, 0); // stop
     if (front) front->is_calibrated = 1;
