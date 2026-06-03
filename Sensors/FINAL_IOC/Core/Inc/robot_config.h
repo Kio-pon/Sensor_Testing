@@ -14,11 +14,15 @@
 
 #define ENABLE_QTR_FRONT     1
 #define ENABLE_QTR_RIGHT     1
-#define ENABLE_QTR_LEFT      0
+#define ENABLE_QTR_LEFT      1
 
 #define ENABLE_SHARP_FRONT   0
 #define ENABLE_SHARP_LEFT    0
 #define ENABLE_SHARP_RIGHT   0
+
+#define ENABLE_VL53L0X_FRONT 0
+#define ENABLE_VL53L0X_LEFT  0
+#define ENABLE_VL53L0X_RIGHT 0
 
 #define ENABLE_COLOR_SENSOR  0
 #define ENABLE_ARM_SERVO     0

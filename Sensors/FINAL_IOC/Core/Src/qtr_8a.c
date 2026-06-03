@@ -26,8 +26,8 @@ void QTR_ReadCalibrated(QTR_Array_t *array, uint16_t *calibrated_values, volatil
     uint16_t sensor_values[MAX_QTR_SENSORS];
     QTR_ReadRaw(array, sensor_values, adc_buffer);
     for (uint8_t i = 0; i < array->num_sensors; i++) {
-        // User requested inverted logic: > 3950 is Black, <= 3950 is White
-        if (sensor_values[i] > 3950) {
+        // User requested inverted logic: > 4000 is Black, <= 4000 is White
+        if (sensor_values[i] > 4000) {
             calibrated_values[i] = 1000; // Black
         } else {
             calibrated_values[i] = 0;    // White

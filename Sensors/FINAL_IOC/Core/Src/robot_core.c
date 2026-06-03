@@ -32,6 +32,7 @@ static Mecanum_Chassis_t chassis;
 
 static PID_t line_pid_front;
 static PID_t line_pid_right;
+static PID_t line_pid_left;
 
 #if ENABLE_QTR_FRONT
 static QTR_Array_t qtr_front;
@@ -164,12 +165,12 @@ static void Sensors_Poll(void)
 #endif
 
 #if ENABLE_QTR_LEFT
-    adc_left_buffer[0] = Read_ADC_Channel(&hadc1, ADC_CHANNEL_1); // PA0
-    adc_left_buffer[1] = Read_ADC_Channel(&hadc3, ADC_CHANNEL_13); // PE7
-    adc_left_buffer[2] = Read_ADC_Channel(&hadc1, ADC_CHANNEL_8); // PC2
-    adc_left_buffer[3] = Read_ADC_Channel(&hadc1, ADC_CHANNEL_9); // PC3
-    adc_left_buffer[4] = Read_ADC_Channel(&hadc4, ADC_CHANNEL_3); // PB12
-    adc_left_buffer[5] = Read_ADC_Channel(&hadc3, ADC_CHANNEL_5); // PB13 (ADC3_IN5)
+    adc_left_buffer[0] = Read_ADC_Channel(&hadc3, ADC_CHANNEL_5);  // PB13
+    adc_left_buffer[1] = Read_ADC_Channel(&hadc1, ADC_CHANNEL_1);  // PA0
+    adc_left_buffer[2] = Read_ADC_Channel(&hadc3, ADC_CHANNEL_13); // PE7
+    adc_left_buffer[3] = Read_ADC_Channel(&hadc1, ADC_CHANNEL_8);  // PC2
+    adc_left_buffer[4] = Read_ADC_Channel(&hadc1, ADC_CHANNEL_9);  // PC3
+    adc_left_buffer[5] = Read_ADC_Channel(&hadc4, ADC_CHANNEL_3);  // PB12
 #endif
 }
 
@@ -221,13 +222,18 @@ void Robot_Init(void)
     HAL_GPIO_Init(GPIOF, &GPIO_InitStruct_QTR);
 
     // Right array: PC0, PC1, PC5, PB0, PB1, PB2
+    // Left array: PA0, PE7, PC2, PC3, PB12, PB13
     __HAL_RCC_GPIOC_CLK_ENABLE();
-    GPIO_InitStruct_QTR.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_5;
+    GPIO_InitStruct_QTR.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_5 | GPIO_PIN_2 | GPIO_PIN_3;
     HAL_GPIO_Init(GPIOC, &GPIO_InitStruct_QTR);
 
     __HAL_RCC_GPIOB_CLK_ENABLE();
-    GPIO_InitStruct_QTR.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2;
+    GPIO_InitStruct_QTR.Pin = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_12 | GPIO_PIN_13;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct_QTR);
+
+    __HAL_RCC_GPIOE_CLK_ENABLE();
+    GPIO_InitStruct_QTR.Pin = GPIO_PIN_7;
+    HAL_GPIO_Init(GPIOE, &GPIO_InitStruct_QTR);
 
     // Calibrate all ADCs to ensure they work properly on STM32F3!
     HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
@@ -264,18 +270,38 @@ void Robot_Init(void)
 #endif
 
     /* --- VL53L0X Sequential Initialization --- */
-    // 1. Pull all XSHUT low to reset
+    
+    // Configure XSHUT pins as Outputs!
+    __HAL_RCC_GPIOF_CLK_ENABLE();
+    __HAL_RCC_GPIOD_CLK_ENABLE();
+    GPIO_InitTypeDef GPIO_InitStruct_VL = {0};
+    GPIO_InitStruct_VL.Mode = GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct_VL.Pull = GPIO_NOPULL;
+    GPIO_InitStruct_VL.Speed = GPIO_SPEED_FREQ_LOW;
+    
+    GPIO_InitStruct_VL.Pin = GPIO_PIN_2; // FRONT
+    HAL_GPIO_Init(GPIOF, &GPIO_InitStruct_VL);
+    
+    GPIO_InitStruct_VL.Pin = GPIO_PIN_11 | GPIO_PIN_12; // LEFT & RIGHT
+    HAL_GPIO_Init(GPIOD, &GPIO_InitStruct_VL);
+
+    // 1. Pull XSHUT low to reset
     HAL_GPIO_WritePin(GPIOF, GPIO_PIN_2, GPIO_PIN_RESET); // FRONT
-    HAL_GPIO_WritePin(GPIOD, GPIO_PIN_11, GPIO_PIN_RESET); // LEFT
-    HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, GPIO_PIN_RESET); // RIGHT
     HAL_Delay(10);
     
 #if ENABLE_VL53L0X_FRONT
+    printf("Booting FRONT VL53L0X...\r\n");
     HAL_GPIO_WritePin(GPIOF, GPIO_PIN_2, GPIO_PIN_SET); // Boot FRONT
     HAL_Delay(10);
     VL53L0X_SelectSensor(0);
-    setAddress(0x54);
-    if (!initVL53L0X(1)) printf("VL53L0X FRONT Init Failed!\r\n");
+    setTimeout(500); // 500ms timeout to prevent infinite hangs!
+    
+    // We skip setAddress() so it stays at the default 0x52!
+    // printf("Setting I2C Address...\r\n");
+    // setAddress(0x54);
+
+    printf("Initializing VL53L0X...\r\n");
+    if (!initVL53L0X(1)) printf("VL53L0X FRONT Init Failed! (Check wiring/XSHUT)\r\n");
     else { startContinuous(0); printf("VL53L0X FRONT Ready.\r\n"); }
 #endif
 
@@ -309,6 +335,7 @@ void Robot_Init(void)
 #endif
 #if ENABLE_QTR_LEFT
     QTR_Init(&qtr_left, 6);
+    PID_Init(&line_pid_left, 0.80f, 0.0f, 0.00f, 500.0f, 1200.0f);
 #endif
 
     // Startup Calibration Sequence (Removed as requested)
@@ -387,12 +414,18 @@ void Robot_RunLoop(void)
     {
         uint16_t right_cal[6];
         QTR_ReadCalibrated(&qtr_right, right_cal, adc_right_buffer);
+        
+        // USER OVERRIDE: R2 (index 2) is broken, completely ignore it!
+        right_cal[2] = 0;
+
         for (int i = 0; i < 6; i++)
             right_qtr_filtered[i] =
                 (uint16_t)((EMA_ALPHA * right_cal[i]) + ((1.0f - EMA_ALPHA) * right_qtr_filtered[i]));
 
         /* Count how many right sensors see black */
         for (int i = 0; i < 6; i++) {
+            // Also don't count R2 for the black count
+            if (i == 2) continue; 
             if (right_qtr_filtered[i] >= 400) right_black_count++;
         }
 
@@ -406,51 +439,48 @@ void Robot_RunLoop(void)
     }
 #endif
 
+    /* ---- LEFT ARRAY PROCESSING ---- */
+#if ENABLE_QTR_LEFT
+    uint8_t left_black_count = 0;
+    {
+        uint16_t left_cal[6];
+        QTR_ReadCalibrated(&qtr_left, left_cal, adc_left_buffer);
+        for (int i = 0; i < 6; i++)
+            left_qtr_filtered[i] =
+                (uint16_t)((EMA_ALPHA * left_cal[i]) + ((1.0f - EMA_ALPHA) * left_qtr_filtered[i]));
+
+        /* Count how many left sensors see black */
+        for (int i = 0; i < 6; i++) {
+            if (left_qtr_filtered[i] >= 400) left_black_count++;
+        }
+    }
+#endif
+
+    /* ---- JUNCTION CHECKING (NO MOTORS) ---- */
+    if (front_black_count >= 2 && left_black_count >= 2 && right_black_count >= 2) {
+        printf("\r\n============================\r\n");
+        printf("     !!! CROSS JUNCTION !!! \r\n");
+        printf("============================\r\n");
+    }
+
     /* ---- STATE MACHINE ---- */
 #if ENABLE_CHASSIS
     static uint8_t robot_state = 0;
-    static uint32_t state_start = 0;
 
     if (robot_state == 0) {
-        /* ====== STATE 0: LINE FOLLOWING (FRONT) ====== */
-        static uint32_t state0_start = 0;
-        if (state0_start == 0) state0_start = HAL_GetTick();
+        /* ====== STATE 0: DRIVE FORWARD 50 CM ====== */
+        extern volatile int32_t enc1_count;
+        int32_t target_ticks = (int32_t)(50.0f * TICKS_PER_CM); // 50 cm
+        
+        int32_t current_ticks = enc1_count;
+        if (current_ticks < 0) current_ticks = -current_ticks; // absolute value for safety!
 
-        if (front_black_count == 0) {
-            Chassis_Drive(&chassis, 0, 0, 0); // Stop if we fall off
+        if (current_ticks < target_ticks) {
+            Chassis_Drive(&chassis, base_speed, 0, 0); // straight forward
         } else {
-            /* Follow the line using front array PID. (Inverted from - to +) */
-            Chassis_Drive(&chassis, base_speed, 0, omega_front);
-        }
-
-        /* Wait 1 second before we start looking for a junction (all 8 front sensors see black) */
-        if (HAL_GetTick() - state0_start > 1000) {
-            if (front_black_count >= 8) {
-                robot_state = 1;
-                printf("\r\n>>> JUNCTION FOUND! CLEARING IT... <<<\r\n");
-            }
-        }
-    }
-    else if (robot_state == 1) {
-        /* ====== STATE 1: CLEAR THE JUNCTION ====== */
-        /* Start strafing right using the right PID, until the front array leaves the junction */
-        Chassis_Drive(&chassis, 0, base_speed, -omega_right);
-
-        if (front_black_count == 0) {
-            robot_state = 3;
-            printf("\r\n>>> JUNCTION CLEARED. STRAFING... <<<\r\n");
-        }
-    }
-    else if (robot_state == 3) {
-        /* ====== STATE 3: STRAFE RIGHT (FOLLOW RIGHT ARRAY) ====== */
-        /* Use the right array PID to follow the line while strafing */
-        Chassis_Drive(&chassis, 0, base_speed, -omega_right);
-
-        /* When the front array detects a line crossing it again, STOP! */
-        if (front_black_count >= 2) {
-            Chassis_Drive(&chassis, 0, 0, 0);
+            Chassis_Drive(&chassis, 0, 0, 0); // STOP
             robot_state = 99; // HALT
-            printf("\r\n>>> FRONT LINE DETECTED AGAIN - HALTED <<<\r\n");
+            printf("\r\n>>> REACHED 50 CM! HALTING. <<<\r\n");
         }
     }
     else {
@@ -472,6 +502,13 @@ void Robot_RunLoop(void)
         printf("     QTR SENSOR + STATE       \r\n");
         printf("==============================\r\n");
 
+#if ENABLE_VL53L0X_FRONT
+        VL53L0X_SelectSensor(0);
+        uint16_t dist_front = readRangeContinuousMillimeters(NULL);
+        printf("--- FRONT VL53L0X: %u mm ---\r\n", dist_front);
+#endif
+
+
 #if ENABLE_QTR_FRONT
         printf("--- FRONT (8) Black:%d ---\r\n", front_black_count);
         for (int i = 0; i < 8; i++) {
@@ -491,9 +528,31 @@ void Robot_RunLoop(void)
         }
 #endif
 
+#if ENABLE_QTR_LEFT
+        const char* left_pins[] = {"PB13", "PA0", "PE7", "PC2", "PC3", "PB12"};
+        printf("\r\n--- LEFT (6) Black:%d ---\r\n", left_black_count);
+        for (int i = 0; i < 6; i++) {
+            uint16_t raw = adc_left_buffer[i];
+            uint16_t cal_val = left_qtr_filtered[i];
+            const char* color = (cal_val > 300) ? "BLACK" : "WHITE";
+            printf("L%d(%s) Raw:%4d Cal:%3d%% %s\r\n", i, left_pins[i], raw, cal_val/10, color);
+        }
+#endif
+
 #if ENABLE_CHASSIS
         printf("\r\nState: %d\r\n", robot_state);
 #endif
+
+#if ENABLE_ENCODERS
+        extern volatile int32_t enc1_count;
+        extern volatile int32_t enc2_count;
+        extern volatile int32_t enc3_count;
+        extern volatile int32_t enc4_count;
+        printf("\r\n--- ENCODERS ---\r\n");
+        printf("Enc1 (FR): %6ld | Enc2 (RR): %6ld\r\n", enc1_count, enc2_count);
+        printf("Enc3 (RL): %6ld | Enc4 (FL): %6ld\r\n", enc3_count, enc4_count);
+#endif
+
         printf("==============================\r\n");
         last_tele = now;
     }
