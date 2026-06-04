@@ -12,9 +12,7 @@
 #define ENABLE_CHASSIS       1
 #define ENABLE_ENCODERS      1
 
-#define ENABLE_QTR_FRONT     1
-#define ENABLE_QTR_RIGHT     1
-#define ENABLE_QTR_LEFT      1
+#define ENABLE_BFD_FRONT     1
 
 #define ENABLE_SHARP_FRONT   0
 #define ENABLE_SHARP_LEFT    0
@@ -23,6 +21,8 @@
 #define ENABLE_VL53L0X_FRONT 0
 #define ENABLE_VL53L0X_LEFT  0
 #define ENABLE_VL53L0X_RIGHT 0
+
+#define ENABLE_GYRO          1
 
 #define ENABLE_COLOR_SENSOR  0
 #define ENABLE_ARM_SERVO     0
@@ -34,7 +34,7 @@
 
 /* Telemetry blocks the CPU over UART. 1 for the bench only.
    ALWAYS set to 0 for a scored run. */
-#define ENABLE_TELEMETRY     1
+#define ENABLE_TELEMETRY     0
 
 /* ============================================================
    PHYSICAL CONSTANTS (one place, never retype a raw number)
@@ -65,7 +65,13 @@
 
 /* Sharp sensor safe floor. Below this it goes blind. Hand off
    to encoders at this distance and never trust Sharp under it. */
-#define SHARP_BLIND_CM       15.0f
+#define SHARP_BLIND_CM       25.0f
+
+/* Typical mounting distance offset for Sharp distance sensors.
+   Often recessed by the blind distance (e.g., 15cm back from the bumper)
+   or extended 5-6cm forward depending on the chassis design. 
+   Set to 5.0f as a standard forward offset placeholder. */
+#define SHARP_MOUNT_OFFSET_CM 5.0f
 
 /* Sensor fusion weights for the strafe heading correction. */
 #define WEIGHT_QTR_OMEGA     0.95f
