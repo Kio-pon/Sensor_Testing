@@ -9,7 +9,6 @@ float gyro_roll_deg = 0.0f;
 static float gyro_z_offset = 0.0f;
 static float gyro_x_offset = 0.0f;
 static float gyro_y_offset = 0.0f;
-static uint32_t last_gyro_time = 0;
 
 static void IMU_WriteReg(SPI_HandleTypeDef *hspi, uint8_t reg, uint8_t data) {
     uint8_t tx[2];
@@ -73,6 +72,11 @@ void IMU_Init(SPI_HandleTypeDef *hspi) {
     int32_t x_sum = 0, y_sum = 0, z_sum = 0;
     int samples = 200; // 400ms total calibration time
     for(int i = 0; i < samples; i++) {
+        // Blink LD5 (PE10) every 10 samples (20ms) to indicate calibration is running
+        if (i % 10 == 0) {
+            HAL_GPIO_TogglePin(GPIOE, LD5_Pin);
+        }
+
         uint8_t tx[7] = {0};
         uint8_t rx[7] = {0};
         tx[0] = I3G4250D_OUT_X_L | 0xC0; 
@@ -94,19 +98,22 @@ void IMU_Init(SPI_HandleTypeDef *hspi) {
     gyro_y_offset = (float)y_sum / samples;
     gyro_z_offset = (float)z_sum / samples;
     
+    // Turn LED off when done
+    HAL_GPIO_WritePin(GPIOE, LD5_Pin, GPIO_PIN_RESET);
+
     printf("[IMU] Calibration Done! Z-offset: %.2f\r\n", (double)gyro_z_offset);
 
-    last_gyro_time = HAL_GetTick();
     gyro_yaw_deg = 0.0f;
     gyro_pitch_deg = 0.0f;
     gyro_roll_deg = 0.0f;
 }
 
-void IMU_ReadGyro(SPI_HandleTypeDef *hspi) {
-    uint32_t now = HAL_GetTick();
-    float dt = (now - last_gyro_time) / 1000.0f;
+void IMU_ResetYaw(void) {
+    gyro_yaw_deg = 0.0f;
+}
+
+void IMU_ReadGyro(SPI_HandleTypeDef *hspi, float dt) {
     if (dt <= 0.0f) return;
-    last_gyro_time = now;
 
     uint8_t tx[7] = {0};
     uint8_t rx[7] = {0};

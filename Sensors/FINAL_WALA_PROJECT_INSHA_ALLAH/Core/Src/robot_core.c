@@ -2,14 +2,35 @@
 #include "motor_driver.h"
 #include "encoders.h"
 #include "imu.h"
+
+#include "qtr_array.h"
+#include "sharp_ir.h"
+#include "navigation.h"
 #include <stdio.h>
+#include <math.h>
 
 static uint32_t last_loop_time = 0;
+
+/* Global Control Variables */
+float target_heading = 0.0f;
+int32_t robot_vx = 0;
+int32_t robot_vy = 0;
+PID_t gyro_pid;
+int32_t nav_omega_override = 0;
+bool use_nav_omega = false;
+
+/* Absolute Odometry (Grid Position) */
+float global_x = 0.0f; // mm
+float global_y = 0.0f; // mm
 
 /* External peripheral handles (defined in main.c) */
 extern TIM_HandleTypeDef htim2;
 extern TIM_HandleTypeDef htim6;
 extern SPI_HandleTypeDef hspi1;
+extern ADC_HandleTypeDef hadc1;
+extern ADC_HandleTypeDef hadc2;
+extern ADC_HandleTypeDef hadc3;
+extern ADC_HandleTypeDef hadc4;
 
 #if ENABLE_CHASSIS
 static Mecanum_Chassis_t chassis;
@@ -79,7 +100,7 @@ void Robot_Init(void)
 {
     printf("\033[2J\033[H");
     printf("======================================\r\n");
-    printf("     CLEAN SLATE INIT (PHASE 1)       \r\n");
+    printf("         ROBOT CORE ONLINE            \r\n");
     printf("======================================\r\n");
 
 #if ENABLE_CHASSIS
@@ -108,7 +129,12 @@ void Robot_Init(void)
 
 #if ENABLE_GYRO
     IMU_Init(&hspi1);
+    
+    /* Initialize Gyro PID: Kp=30, Ki=0, Kd=10, max_int=1000, max_out=1500 */
+    PID_Init(&gyro_pid, 30.0f, 0.0f, 10.0f, 0.0f, 1000.0f, 1500.0f);
 #endif
+
+    Nav_Init();
 
     /* start TIM6 for encoders and 200 Hz control beat */
     HAL_TIM_Base_Start_IT(&htim6);
@@ -125,12 +151,83 @@ void Robot_RunLoop(void)
     control_due = 0;
 
 #if ENABLE_GYRO
-    IMU_ReadGyro(&hspi1);
+    IMU_ReadGyro(&hspi1, 0.005f); // Exactly 5ms loop time from TIM6
 #endif
 
+
+#if ENABLE_QTR_ARRAY
+    QTR_Poll(&hadc1, &hadc2, &hadc3, &hadc4);
+#endif
+#if ENABLE_SHARP_IR
+    Sharp_Poll(&hadc1);
+#endif
+
+    /* Execute Navigation State Machine */
+    Nav_RunSequence();
+    Nav_Update();
+
 #if ENABLE_CHASSIS
-    // For Phase 1 testing, just stop motors.
-    Chassis_Drive(&chassis, 0, 0, 0); 
+    int32_t omega = 0;
+
+#if ENABLE_GYRO
+    /* Calculate heading error and wrap it to [-180, 180] */
+    float heading_error = target_heading - gyro_yaw_deg;
+    while (heading_error > 180.0f) heading_error -= 360.0f;
+    while (heading_error < -180.0f) heading_error += 360.0f;
+
+    /* PID Update: dt is 0.005s (200 Hz) */
+    omega = (int32_t)PID_Update(&gyro_pid, heading_error, 0.005f, 0.0f);
+#endif
+
+    if (use_nav_omega) {
+        omega = nav_omega_override;
+    }
+
+    /* === Slew Rate Controller === 
+       Smoothly ramps up/down the actual velocities sent to the motors 
+       to prevent wheel slip and encoder miscounts. 
+       Max change per 5ms loop. */
+    static float actual_vx = 0.0f;
+    static float actual_vy = 0.0f;
+    const float SLEW_ACCEL = 40.0f;
+
+    /* Ramp VX */
+    if (actual_vx < robot_vx) {
+        actual_vx += SLEW_ACCEL;
+        if (actual_vx > robot_vx) actual_vx = robot_vx;
+    } else if (actual_vx > robot_vx) {
+        actual_vx -= SLEW_ACCEL;
+        if (actual_vx < robot_vx) actual_vx = robot_vx;
+    }
+
+    /* Ramp VY */
+    if (actual_vy < robot_vy) {
+        actual_vy += SLEW_ACCEL;
+        if (actual_vy > robot_vy) actual_vy = robot_vy;
+    } else if (actual_vy > robot_vy) {
+        actual_vy -= SLEW_ACCEL;
+        if (actual_vy < robot_vy) actual_vy = robot_vy;
+    }
+
+    /* === Absolute Grid Odometry (X,Y Tracking) === */
+    // Estimate mm/s speed based on PWM. (Assuming 1500 PWM = ~1000 mm/s).
+    // User can tune this scale factor for their exact motors.
+    float local_vx_mm_s = actual_vx * (1000.0f / 1500.0f);
+    float local_vy_mm_s = actual_vy * (1000.0f / 1500.0f);
+    
+    float yaw_rad = gyro_yaw_deg * (M_PI / 180.0f);
+    float cos_y = cosf(yaw_rad);
+    float sin_y = sinf(yaw_rad);
+    
+    /* 2D Rotation Matrix to convert Local velocities to Global grid velocities */
+    float v_global_x = local_vx_mm_s * cos_y - local_vy_mm_s * sin_y;
+    float v_global_y = local_vx_mm_s * sin_y + local_vy_mm_s * cos_y;
+    
+    global_x += v_global_x * 0.005f; // integrate over 5ms dt
+    global_y += v_global_y * 0.005f;
+
+    /* Command the chassis */
+    Chassis_Drive(&chassis, (int32_t)actual_vx, (int32_t)actual_vy, omega);
 #endif
 
 #if ENABLE_TELEMETRY
@@ -139,7 +236,7 @@ void Robot_RunLoop(void)
     if (now - last_tele >= 100) {
         printf("\033[H");
         printf("==============================\r\n");
-        printf("     CLEAN SLATE TELEMETRY    \r\n");
+        printf("       ROBOT TELEMETRY        \r\n");
         printf("==============================\r\n");
 
 #if ENABLE_GYRO
@@ -154,6 +251,27 @@ void Robot_RunLoop(void)
         printf("\r\n--- ENCODERS ---\r\n");
         printf("Enc1 (FR): %6ld | Enc2 (RR): %6ld\r\n", enc1_count, enc2_count);
         printf("Enc3 (RL): %6ld | Enc4 (FL): %6ld\r\n", enc3_count, enc4_count);
+#endif
+
+
+
+#if ENABLE_QTR_ARRAY
+        printf("\r\n--- QTR ANALOG ARRAYS ---\r\n");
+        printf("FRONT: [%4d, %4d, %4d, %4d, %4d, %4d, %4d, %4d] | Pos: %ld\r\n", 
+               qtr_front[0], qtr_front[1], qtr_front[2], qtr_front[3], 
+               qtr_front[4], qtr_front[5], qtr_front[6], qtr_front[7],
+               QTR_GetFrontLinePosition());
+        printf("LEFT:  [%4d, %4d, %4d, %4d, %4d, %4d] | Pos: %ld\r\n", 
+               qtr_left[0], qtr_left[1], qtr_left[2], qtr_left[3], 
+               qtr_left[4], qtr_left[5], QTR_GetLeftLinePosition());
+        printf("RIGHT: [%4d, %4d, %4d, %4d, %4d, %4d] | Pos: %ld\r\n", 
+               qtr_right[0], qtr_right[1], qtr_right[2], qtr_right[3], 
+               qtr_right[4], qtr_right[5], QTR_GetRightLinePosition());
+#endif
+
+#if ENABLE_SHARP_IR
+        printf("\r\n--- DISTANCE ---\r\n");
+        printf("SHARP IR (Raw): %4d\r\n", sharp_ir_raw);
 #endif
 
         printf("==============================\r\n");

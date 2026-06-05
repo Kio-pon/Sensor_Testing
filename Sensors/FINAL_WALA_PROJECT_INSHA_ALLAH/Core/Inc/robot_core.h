@@ -2,8 +2,20 @@
 #define ROBOT_CORE_H
 
 #include "main.h"
-
+#include <stdbool.h>
+#include "pid.h"
 #include "robot_config.h"
+
+extern float target_heading;
+extern int32_t robot_vx;
+extern int32_t robot_vy;
+extern PID_t gyro_pid;
+extern int32_t nav_omega_override;
+extern bool use_nav_omega;
+
+/* Absolute Odometry (Grid Position) */
+extern float global_x; // mm
+extern float global_y; // mm
 
 void Robot_Init(void);
 void Robot_RunLoop(void);

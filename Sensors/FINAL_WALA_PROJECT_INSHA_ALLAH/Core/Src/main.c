@@ -24,6 +24,7 @@
 #include "robot_core.h"
 #include <stdio.h>
 #include <stdbool.h>
+#include "tcs34725.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -47,6 +48,8 @@ ADC_HandleTypeDef hadc2;
 ADC_HandleTypeDef hadc3;
 ADC_HandleTypeDef hadc4;
 DMA_HandleTypeDef hdma_adc3;
+
+I2C_HandleTypeDef hi2c1;
 
 SPI_HandleTypeDef hspi1;
 
@@ -77,6 +80,7 @@ static void MX_ADC2_Init(void);
 static void MX_ADC3_Init(void);
 static void MX_ADC4_Init(void);
 static void MX_SPI1_Init(void);
+static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
 /* USER CODE END PFP */
 
@@ -146,7 +150,18 @@ int main(void)
   MX_ADC3_Init();
   MX_ADC4_Init();
   MX_SPI1_Init();
+  MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
+  HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
+  HAL_ADCEx_Calibration_Start(&hadc2, ADC_SINGLE_ENDED);
+  HAL_ADCEx_Calibration_Start(&hadc3, ADC_SINGLE_ENDED);
+  HAL_ADCEx_Calibration_Start(&hadc4, ADC_SINGLE_ENDED);
+  
+  if (TCS34725_Init(&hi2c1) != HAL_OK) {
+      /* Initialization Error handling could go here */
+      printf("TCS34725 Init Failed!\r\n");
+  }
+  
   Robot_Init();
   /* USER CODE END 2 */
 
@@ -175,10 +190,11 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_BYPASS;
   RCC_OscInitStruct.HSEPredivValue = RCC_HSE_PREDIV_DIV1;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
   RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL6;
@@ -201,11 +217,12 @@ void SystemClock_Config(void)
     Error_Handler();
   }
   PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USB|RCC_PERIPHCLK_USART1
-                              |RCC_PERIPHCLK_TIM1|RCC_PERIPHCLK_ADC12
-                              |RCC_PERIPHCLK_ADC34;
+                              |RCC_PERIPHCLK_I2C1|RCC_PERIPHCLK_TIM1
+                              |RCC_PERIPHCLK_ADC12|RCC_PERIPHCLK_ADC34;
   PeriphClkInit.Usart1ClockSelection = RCC_USART1CLKSOURCE_PCLK2;
   PeriphClkInit.Adc12ClockSelection = RCC_ADC12PLLCLK_DIV1;
   PeriphClkInit.Adc34ClockSelection = RCC_ADC34PLLCLK_DIV1;
+  PeriphClkInit.I2c1ClockSelection = RCC_I2C1CLKSOURCE_HSI;
   PeriphClkInit.USBClockSelection = RCC_USBCLKSOURCE_PLL;
   PeriphClkInit.Tim1ClockSelection = RCC_TIM1CLK_HCLK;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
@@ -457,6 +474,54 @@ static void MX_ADC4_Init(void)
   /* USER CODE BEGIN ADC4_Init 2 */
 
   /* USER CODE END ADC4_Init 2 */
+
+}
+
+/**
+  * @brief I2C1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C1_Init(void)
+{
+
+  /* USER CODE BEGIN I2C1_Init 0 */
+
+  /* USER CODE END I2C1_Init 0 */
+
+  /* USER CODE BEGIN I2C1_Init 1 */
+
+  /* USER CODE END I2C1_Init 1 */
+  hi2c1.Instance = I2C1;
+  hi2c1.Init.Timing = 0x00201D2B;
+  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c1.Init.OwnAddress2 = 0;
+  hi2c1.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
+  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Analogue filter
+  */
+  if (HAL_I2CEx_ConfigAnalogFilter(&hi2c1, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Digital filter
+  */
+  if (HAL_I2CEx_ConfigDigitalFilter(&hi2c1, 0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C1_Init 2 */
+
+  /* USER CODE END I2C1_Init 2 */
 
 }
 
@@ -872,12 +937,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : ARDUINO_DONE_Pin */
-  GPIO_InitStruct.Pin = ARDUINO_DONE_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
-  HAL_GPIO_Init(ARDUINO_DONE_GPIO_Port, &GPIO_InitStruct);
-
   /*Configure GPIO pin : FL_ENC_B_Pin */
   GPIO_InitStruct.Pin = FL_ENC_B_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
@@ -915,14 +974,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : I2C1_SCL_Pin I2C1_SDA_Pin */
-  GPIO_InitStruct.Pin = I2C1_SCL_Pin|I2C1_SDA_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_OD;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-  GPIO_InitStruct.Alternate = GPIO_AF4_I2C1;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */

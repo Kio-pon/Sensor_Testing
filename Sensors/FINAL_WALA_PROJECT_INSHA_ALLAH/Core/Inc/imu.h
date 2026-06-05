@@ -18,6 +18,7 @@ extern float gyro_pitch_deg;
 extern float gyro_roll_deg;
 
 void IMU_Init(SPI_HandleTypeDef *hspi);
-void IMU_ReadGyro(SPI_HandleTypeDef *hspi);
+void IMU_ReadGyro(SPI_HandleTypeDef *hspi, float dt);
+void IMU_ResetYaw(void);
 
 #endif /* IMU_H */

@@ -6,22 +6,19 @@
 /* ============================================================
    HARDWARE SWITCHBOARD
    1 = compiled and run. 0 = stripped from the binary.
-   Start with FRONT only, everything else 0, to tune the
-   forward line follower first.
    ============================================================ */
-#define ENABLE_CHASSIS       1
-#define ENABLE_ENCODERS      1
-#define ENABLE_GYRO          1
+#define ENABLE_CHASSIS       0
+#define ENABLE_ENCODERS      0
+#define ENABLE_GYRO          0
 
-/* Sensor suite will be re-added in Phase 2 */
-#define ENABLE_QTR_ANALOG    0
-#define ENABLE_BFD_DIGITAL   0
-#define ENABLE_SHARP_ANALOG  0
-#define ENABLE_ARDUINO_COMMS 0
+/* Sensor suite toggles */
+#define ENABLE_QTR_ARRAY     1
+#define ENABLE_BFD_ARRAY     0
+#define ENABLE_SHARP_IR      1
 
 /* Telemetry blocks the CPU over UART. 1 for the bench only.
    ALWAYS set to 0 for a scored run. */
-#define ENABLE_TELEMETRY     0
+#define ENABLE_TELEMETRY     1
 
 /* ============================================================
    PHYSICAL CONSTANTS (one place, never retype a raw number)

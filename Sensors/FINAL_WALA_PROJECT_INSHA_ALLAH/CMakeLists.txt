@@ -50,9 +50,10 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/tcs34725.c
     Core/Src/encoders.c
     Core/Src/robot_core.c
-    Core/Src/sharp_sensor.c
-    Core/Src/VL53L0X.c
+    Core/Src/navigation.c
     Core/Src/imu.c
+    Core/Src/qtr_array.c
+    Core/Src/sharp_ir.c
     # Add user sources here
 )
 
