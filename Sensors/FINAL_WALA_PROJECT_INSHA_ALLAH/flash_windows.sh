@@ -509,7 +509,7 @@ for attempt in $(seq 1 $MAX_RETRIES); do
     case "$FLASH_TOOL" in
         programmer)
             # STM32CubeProgrammer CLI — primary tool on Windows (no st-flash needed)
-            if STM32_Programmer_CLI -c port=SWD -d "$BIN_FILE" "$FLASH_ADDR" -v -rst 2>&1; then
+            if STM32_Programmer_CLI -c port=SWD mode=UR -d "$BIN_FILE" "$FLASH_ADDR" -v -rst 2>&1; then
                 FLASH_OK=true
             fi
             ;;

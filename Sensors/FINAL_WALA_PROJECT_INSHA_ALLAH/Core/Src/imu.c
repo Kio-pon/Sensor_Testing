@@ -139,12 +139,16 @@ void IMU_ReadGyro(SPI_HandleTypeDef *hspi, float dt) {
     y_rate *= 0.00875f;
     z_rate *= 0.00875f;
     
-    // Apply deadband (Ignore noise below 1.5 degrees per second)
+    // Apply low-pass filter to z_rate to filter out structural/motor vibrations
+    static float filtered_z_rate = 0.0f;
+    filtered_z_rate = 0.15f * z_rate + 0.85f * filtered_z_rate;
+    
+    // Apply deadband (Ignore noise below 1.5 degrees per second for roll/pitch, and 0.8 degrees per second for filtered yaw rate)
     if (x_rate < 1.5f && x_rate > -1.5f) x_rate = 0.0f;
     if (y_rate < 1.5f && y_rate > -1.5f) y_rate = 0.0f;
-    if (z_rate < 1.5f && z_rate > -1.5f) z_rate = 0.0f;
+    if (filtered_z_rate < 0.8f && filtered_z_rate > -0.8f) filtered_z_rate = 0.0f;
 
     gyro_roll_deg += x_rate * dt;
     gyro_pitch_deg += y_rate * dt;
-    gyro_yaw_deg += z_rate * dt;
+    gyro_yaw_deg += filtered_z_rate * dt;
 }

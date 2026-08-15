@@ -66,7 +66,7 @@ void QTR_Poll(ADC_HandleTypeDef* hadc1, ADC_HandleTypeDef* hadc2, ADC_HandleType
 }
 
 /* Helper macro for perfectly clean threshold logic */
-#define APPLY_QTR_THRESHOLD(val) ( (val) < 4094 ? 0 : (val) )
+#define APPLY_QTR_THRESHOLD(val) ( (val) < 2000 ? 0 : (val) )
 
 int32_t QTR_GetFrontLinePosition(void)
 {
@@ -104,6 +104,7 @@ int32_t QTR_GetRightLinePosition(void)
     uint32_t weighted_sum = 0;
     
     for(int i = 0; i < 6; i++) {
+        if (i == 2 || i == 3) continue; // Skip floating pins!
         uint16_t value = APPLY_QTR_THRESHOLD(qtr_right[i]);
         sum += value;
         weighted_sum += (uint32_t)value * (i * 1000); 

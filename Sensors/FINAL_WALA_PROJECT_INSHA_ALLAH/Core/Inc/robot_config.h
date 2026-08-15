@@ -7,9 +7,9 @@
    HARDWARE SWITCHBOARD
    1 = compiled and run. 0 = stripped from the binary.
    ============================================================ */
-#define ENABLE_CHASSIS       0
-#define ENABLE_ENCODERS      0
-#define ENABLE_GYRO          0
+#define ENABLE_CHASSIS       1
+#define ENABLE_ENCODERS      1
+#define ENABLE_GYRO          1
 
 /* Sensor suite toggles */
 #define ENABLE_QTR_ARRAY     1
@@ -65,5 +65,17 @@
 #define EMA_ALPHA            0.25f
 #define LINE_CENTER          3500.0f /* 8-sensor center target */
 #define LINE_DEADBAND        30.0f
+
+/* Deceleration Travel Calibration */
+#define TARGET_STRAIGHT_CM     103.0f
+#define DECEL_COMPENSATION_CM   12.0f
+
+/* Strafe Deceleration Calibration */
+#define EXPECTED_JUNCTION_CM   45.72f
+#define STRAFE_DECEL_START_CM  30.0f
+#define STRAFE_MIN_SPEED       1000
+
+#define STRAFE_CORRECTION_DEG   -1.5f
+#define STRAFE_TICKS_SCALE      0.33f
 
 #endif /* ROBOT_CONFIG_H */

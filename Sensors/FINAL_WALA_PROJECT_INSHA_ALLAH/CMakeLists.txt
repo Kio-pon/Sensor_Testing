@@ -50,6 +50,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/tcs34725.c
     Core/Src/encoders.c
     Core/Src/robot_core.c
+    Core/Src/line_follower.c
     Core/Src/navigation.c
     Core/Src/imu.c
     Core/Src/qtr_array.c
@@ -60,6 +61,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
+    Core/Inc
     # Add user defined include paths
 )
 

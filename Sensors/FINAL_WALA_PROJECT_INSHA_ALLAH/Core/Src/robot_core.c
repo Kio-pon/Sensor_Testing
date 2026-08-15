@@ -1,4 +1,5 @@
 #include "robot_core.h"
+#include "line_follower.h"
 #include "motor_driver.h"
 #include "encoders.h"
 #include "imu.h"
@@ -34,6 +35,7 @@ extern ADC_HandleTypeDef hadc4;
 
 #if ENABLE_CHASSIS
 static Mecanum_Chassis_t chassis;
+static LineFollower_t line_follower;
 #endif
 
 /* ---------------- ENCODERS ----------------
@@ -125,6 +127,9 @@ void Robot_Init(void)
 
     chassis.STBY_Port = GPIOD; chassis.STBY_Pin = GPIO_PIN_5;
     Chassis_Init(&chassis);
+
+    LineFollower_Init(&line_follower);
+    LineFollower_Start(&line_follower);
 #endif
 
 #if ENABLE_GYRO
@@ -162,72 +167,19 @@ void Robot_RunLoop(void)
     Sharp_Poll(&hadc1);
 #endif
 
-    /* Execute Navigation State Machine */
-    Nav_RunSequence();
-    Nav_Update();
+    /* Execute line follower instead of navigation */
+    LineFollower_Update(&line_follower, HAL_GetTick());
 
 #if ENABLE_CHASSIS
-    int32_t omega = 0;
+    int32_t left_speed = 0;
+    int32_t right_speed = 0;
 
-#if ENABLE_GYRO
-    /* Calculate heading error and wrap it to [-180, 180] */
-    float heading_error = target_heading - gyro_yaw_deg;
-    while (heading_error > 180.0f) heading_error -= 360.0f;
-    while (heading_error < -180.0f) heading_error += 360.0f;
+    LineFollower_GetMotorSpeeds(&line_follower, &left_speed, &right_speed);
 
-    /* PID Update: dt is 0.005s (200 Hz) */
-    omega = (int32_t)PID_Update(&gyro_pid, heading_error, 0.005f, 0.0f);
-#endif
-
-    if (use_nav_omega) {
-        omega = nav_omega_override;
-    }
-
-    /* === Slew Rate Controller === 
-       Smoothly ramps up/down the actual velocities sent to the motors 
-       to prevent wheel slip and encoder miscounts. 
-       Max change per 5ms loop. */
-    static float actual_vx = 0.0f;
-    static float actual_vy = 0.0f;
-    const float SLEW_ACCEL = 40.0f;
-
-    /* Ramp VX */
-    if (actual_vx < robot_vx) {
-        actual_vx += SLEW_ACCEL;
-        if (actual_vx > robot_vx) actual_vx = robot_vx;
-    } else if (actual_vx > robot_vx) {
-        actual_vx -= SLEW_ACCEL;
-        if (actual_vx < robot_vx) actual_vx = robot_vx;
-    }
-
-    /* Ramp VY */
-    if (actual_vy < robot_vy) {
-        actual_vy += SLEW_ACCEL;
-        if (actual_vy > robot_vy) actual_vy = robot_vy;
-    } else if (actual_vy > robot_vy) {
-        actual_vy -= SLEW_ACCEL;
-        if (actual_vy < robot_vy) actual_vy = robot_vy;
-    }
-
-    /* === Absolute Grid Odometry (X,Y Tracking) === */
-    // Estimate mm/s speed based on PWM. (Assuming 1500 PWM = ~1000 mm/s).
-    // User can tune this scale factor for their exact motors.
-    float local_vx_mm_s = actual_vx * (1000.0f / 1500.0f);
-    float local_vy_mm_s = actual_vy * (1000.0f / 1500.0f);
-    
-    float yaw_rad = gyro_yaw_deg * (M_PI / 180.0f);
-    float cos_y = cosf(yaw_rad);
-    float sin_y = sinf(yaw_rad);
-    
-    /* 2D Rotation Matrix to convert Local velocities to Global grid velocities */
-    float v_global_x = local_vx_mm_s * cos_y - local_vy_mm_s * sin_y;
-    float v_global_y = local_vx_mm_s * sin_y + local_vy_mm_s * cos_y;
-    
-    global_x += v_global_x * 0.005f; // integrate over 5ms dt
-    global_y += v_global_y * 0.005f;
-
-    /* Command the chassis */
-    Chassis_Drive(&chassis, (int32_t)actual_vx, (int32_t)actual_vy, omega);
+    Motor_SetSpeed(&chassis.fl, left_speed);
+    Motor_SetSpeed(&chassis.rl, left_speed);
+    Motor_SetSpeed(&chassis.fr, right_speed);
+    Motor_SetSpeed(&chassis.rr, right_speed);
 #endif
 
 #if ENABLE_TELEMETRY
@@ -248,9 +200,13 @@ void Robot_RunLoop(void)
         extern volatile int32_t enc2_count;
         extern volatile int32_t enc3_count;
         extern volatile int32_t enc4_count;
+        extern int32_t start_ticks;
+        extern int32_t target_ticks;
+        extern NavState_t nav_state;
         printf("\r\n--- ENCODERS ---\r\n");
         printf("Enc1 (FR): %6ld | Enc2 (RR): %6ld\r\n", enc1_count, enc2_count);
         printf("Enc3 (RL): %6ld | Enc4 (FL): %6ld\r\n", enc3_count, enc4_count);
+        printf("Start Ticks: %ld | Target Ticks: %ld | State: %d\r\n", start_ticks, target_ticks, (int)nav_state);
 #endif
 
 
@@ -267,6 +223,37 @@ void Robot_RunLoop(void)
         printf("RIGHT: [%4d, %4d, %4d, %4d, %4d, %4d] | Pos: %ld\r\n", 
                qtr_right[0], qtr_right[1], qtr_right[2], qtr_right[3], 
                qtr_right[4], qtr_right[5], QTR_GetRightLinePosition());
+
+        /* Junction Detection (threshold 4094) */
+        bool front_sees_line = false;
+        for (int i = 0; i < 8; i++) {
+            if (qtr_front[i] >= 4094) {
+                front_sees_line = true;
+                break;
+            }
+        }
+        bool left_sees_line = false;
+        for (int i = 0; i < 6; i++) {
+            if (qtr_left[i] >= 4094) {
+                left_sees_line = true;
+                break;
+            }
+        }
+        /* Right QTR: Skip broken middle pins 2 and 3 */
+        bool right_sees_line = (qtr_right[0] >= 4094 || qtr_right[1] >= 4094 || 
+                                qtr_right[4] >= 4094 || qtr_right[5] >= 4094);
+        bool is_junction = (front_sees_line && left_sees_line && right_sees_line);
+
+        printf("\r\n--- JUNCTION STATUS ---\r\n");
+        printf("Front Sees: %s | Left Sees: %s | Right Sees: %s\r\n",
+               front_sees_line ? "YES" : "NO",
+               left_sees_line ? "YES" : "NO",
+               right_sees_line ? "YES" : "NO");
+        if (is_junction) {
+            printf("junction detected\r\n");
+        } else {
+            printf("Junction:   NONE\r\n");
+        }
 #endif
 
 #if ENABLE_SHARP_IR

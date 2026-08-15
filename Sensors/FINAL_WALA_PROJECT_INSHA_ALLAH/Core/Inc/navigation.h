@@ -29,6 +29,7 @@ void Nav_RunSequence(void);
 /* Non-blocking commands to start an action */
 void Nav_StartMove(float cm, int32_t vx, int32_t vy);
 void Nav_StrafeAlongLineUntilJunction(int32_t speed_vx, float min_cm);
+void Nav_StrafeAlongLineForDistance(float cm, int32_t speed_vx);
 void Nav_StartColorCheck(void);
 void Nav_GoToCoordinate(float target_x_mm, float target_y_mm, int32_t speed);
 void Nav_FollowLineForDistance(float cm, int32_t speed);
